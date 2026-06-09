@@ -131,6 +131,28 @@ body {
 .stagger-vendors > * { animation-delay: calc(var(--stagger-vendor) * var(--i, 0)); }
 .stagger-logs > *    { animation-delay: calc(var(--stagger-log) * var(--i, 0)); }
 
+/* ---- Node-graph edges ----
+ * stroke-dashoffset is paint (not GPU-composited), but these are a handful of
+ * short lines and the "drawing" motion is the literal state signal the spec asks
+ * for (broadcast flow + pitch→contract draw-in). Reduced-motion zeroes both. */
+.edge-dashed {
+  stroke-dasharray: 5 7;
+  animation: dash-flow 0.7s linear infinite;
+}
+@keyframes dash-flow {
+  to { stroke-dashoffset: -24; }
+}
+/* Pair with pathLength="1" so dashoffset 1→0 draws the whole line regardless of
+ * its real length. Runs once and holds (forwards). */
+.edge-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: edge-draw var(--motion-complex) var(--ease-out-expo) forwards;
+}
+@keyframes edge-draw {
+  to { stroke-dashoffset: 0; }
+}
+
 /* Accessibility: honor reduced-motion. State is still communicated by COLOR
  * (winner green, loser dim) — only the movement is removed. */
 @media (prefers-reduced-motion: reduce) {
