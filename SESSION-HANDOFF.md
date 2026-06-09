@@ -2,36 +2,45 @@
 
 # SESSION-HANDOFF.md
 
-Overwritten at the end of every session. Agents read this at session start.
-
 ## Date
 2026-06-09
 
 ## What was completed
-- Canonical project reference is documented in `CLAUDE.md` for AgentBid, a multi-agent agentic procurement system targeting NEXT Hackathon @ SuperAI Singapore.
-- Intended repository structure is documented for `apps/web`, `apps/agents`, `infra`, `db/migrations`, and `docker-compose.yml`.
-- Key planned modules are documented, including `apps/web/app/api/procure/route.ts`, `apps/web/app/api/stream/route.ts`, `apps/agents/src/agents/procurement.ts`, `apps/agents/src/agents/discovery.ts`, `apps/agents/src/agents/supplier.ts`, and `apps/agents/src/agents/governance.ts`.
-- Required environment variables are documented for the web app and agents, including Stripe, Exa, LLM provider keys, `AGENTS_BASE_URL`, `DATABASE_URL`, and `NEXT_PUBLIC_APP_URL`.
+feat-001 (Discovery pipeline — UserIntent → PaymentIntent[]) is **passing**.
+
+All files under `apps/agents/` were built from scratch this session:
+- `src/agents/types.ts` — full shared type set
+- `src/lib/logger.ts` — structured JSON logger
+- `src/lib/llm.ts` — Claude + GPT-4o unified wrapper, auto-selects based on available API key
+- `src/tools/exa.ts` — Exa Agent via `exa.beta.agent.runs.create` + `pollUntilFinished`; 3-retry wrapper on transient errors; text-field JSON extraction fallback; `exaSearchAndContents` last-resort fallback
+- `src/agents/discovery.ts` — LLM query augmentation (platform-name-free), Exa Agent primary path, logs `path: "agent" | "fallback"`
+- `src/agents/procurement.ts` — parses raw intent into UserIntent via LLM, calls discovery
+- `src/index.ts` — Express server, POST /run, GET /health, port 4000
+- `src/test-discovery.ts` — validation harness with box output and raw JSON dump
+- `package.json`, `tsconfig.json`, `.env.example`, `.env`
 
 ## Verification run
 | Command | Result |
 |---|---|
-| Not yet documented | Not yet documented |
+| `cd apps/agents && npx tsc --noEmit` | 0 errors |
+| `cd apps/agents && npm run test:discovery` | VALIDATION PASSED — 5 options, all fields present |
 
 ## What is broken or unverified
-- No completed implementation state is documented in the provided source files.
-- No test, lint, build, typecheck, migration, or runtime verification command output is documented.
-- Actual presence and correctness of the documented repository files is unverified from the provided source.
-- End-to-end procurement flow, SSE streaming, governance enforcement, Exa integration, and Stripe sandbox payment execution are unverified.
+- No ANTHROPIC_API_KEY in `.env` — GPT-4o is being used for all LLM calls. Claude Sonnet will be used automatically once ANTHROPIC_API_KEY is added.
+- Exa Agent runs can occasionally timeout (>180s); poll timeout raised to 300s. Timeout errors do not retry.
+- `apps/web`, `infra`, `db`, `docker-compose.yml` do not exist yet.
 
 ## Next best step
-- Feature: Procurement workflow — Build and verify the end-to-end natural-language purchase intent pipeline.
-- Start from: `apps/web/app/api/procure/route.ts` and `apps/agents/src/agents/procurement.ts`, connecting the web API to the agents service at `AGENTS_BASE_URL`.
-- Pass when: A user intent submitted through the web app starts the workflow, emits agent events through `apps/web/app/api/stream/route.ts`, runs discovery, supplier pitch, governance, and creates or blocks a Stripe sandbox payment according to spending contracts.
+**Feature: feat-002 — Supplier pitch agents**
+
+Start from `apps/agents/src/agents/supplier.ts`. Create a parameterised pitch agent that takes one `PaymentIntent` + `UserIntent` + an LLM model string and returns a `SupplierPitch`. Then update `procurement.ts` to fan out to 3 instances in `Promise.all` — one per LLM (GPT-4o, Claude, Gemini Flash). Extend `npm run test:discovery` or add `npm run test:supplier` to verify.
+
+Write the sprint contract to `TASK.md` before starting.
 
 ## Must not change
-- AgentBid remains a multi-agent agentic procurement system for natural-language purchase intent handling.
-- The documented pipeline must preserve discovery, adversarial supplier pitch competition, procurement decision, governance contract enforcement, and Stripe sandbox payment execution.
-- Do not deviate from architectural, stack, or implementation decisions in `CLAUDE.md` without explicit instruction.
-- Keep web app code under `apps/web`, agent workers under `apps/agents`, AWS CDK infrastructure under `infra`, and database migrations under `db/migrations`.
-- Use Stripe sandbox credentials and test-mode payment flows only.
+- Query augmentation prompt in `discovery.ts` must not name any delivery platforms
+- Exa Agent is the primary discovery path; fallback is last resort only
+- `exaAgentWithRetry` retry count (3) and delay (2s) — working as designed
+- Poll timeout (300000ms) — do not reduce
+- `llm.ts` auto-selection logic (Claude if ANTHROPIC_API_KEY, else GPT-4o)
+- Type definitions in `types.ts` match CLAUDE.md canonical spec
