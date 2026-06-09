@@ -34,6 +34,8 @@ export interface SupplierPitch {
 
 export interface WinnerPaymentIntent extends PaymentIntent {
   procurementRationale: string;
+  score: number;
+  withinBudget: boolean;
   rankedAlternatives: PaymentIntent[];
 }
 
@@ -59,6 +61,7 @@ export interface GovernanceDecision {
     passed: boolean;
     detail: string;
   }>;
+  requiresHumanReview: boolean;
   stripePaymentIntentId?: string;
 }
 

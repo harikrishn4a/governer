@@ -1,1 +1,6 @@
 .env
+node_modules/
+# Next.js
+apps/web/.next/
+apps/web/.env.local
+*.tsbuildinfo

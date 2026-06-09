@@ -44,9 +44,7 @@ If a URL is a search result page rather than a product page, use the most specif
 
 async function augmentQuery(intent: UserIntent): Promise<string> {
   const locationHint = intent.location ? ` near ${intent.location}` : "";
-  const budgetHint = intent.budget
-    ? ` under SGD ${intent.budget}`
-    : "";
+  const budgetHint = intent.budget ? ` under SGD ${intent.budget}` : "";
   const constraintHint =
     intent.constraints && intent.constraints.length > 0
       ? ` (constraints: ${intent.constraints.join(", ")})`
@@ -54,7 +52,7 @@ async function augmentQuery(intent: UserIntent): Promise<string> {
 
   const contextualRaw = `${intent.raw}${locationHint}${budgetHint}${constraintHint}`;
 
-  logger.info("discovery:augment — augmenting query with Claude");
+  logger.info("discovery:augment — sending to LLM", { contextualRaw });
 
   const augmented = await llmCall({
     system: QUERY_AUGMENT_SYSTEM,
@@ -65,7 +63,7 @@ async function augmentQuery(intent: UserIntent): Promise<string> {
   const base = augmented.trim();
   const withVariety = `${base} Return exactly 5 options, each from a DIFFERENT restaurant or vendor. Do not list multiple items from the same restaurant.`;
 
-  logger.info("discovery:augment — done", { augmented: withVariety });
+  logger.info("discovery:augment — augmented query ready", { augmentedQuery: withVariety });
   return withVariety;
 }
 
@@ -73,13 +71,18 @@ async function fallbackDiscover(
   augmentedQuery: string,
   intent: UserIntent
 ): Promise<DiscoveryOption[]> {
-  logger.info("discovery:fallback — using searchAndContents + Claude parsing");
+  logger.info("discovery:fallback — using searchAndContents + LLM parsing");
 
   const results = await exaSearchAndContents(augmentedQuery, 8);
 
   if (!results.results || results.results.length === 0) {
     throw new Error("Exa returned no results for query: " + augmentedQuery);
   }
+
+  logger.info("discovery:fallback — Exa returned raw pages", {
+    count: results.results.length,
+    urls: results.results.map(r => r.url),
+  });
 
   const contentBlocks = results.results
     .map((r, i) => {
@@ -89,9 +92,7 @@ async function fallbackDiscover(
     })
     .join("\n\n---\n\n");
 
-  logger.info("discovery:fallback — parsing with Claude", {
-    sourceCount: results.results.length,
-  });
+  logger.info("discovery:fallback — parsing with LLM", { sourceCount: results.results.length });
 
   const parsed = await llmCallJSON<{ options: DiscoveryOption[] }>({
     system: FALLBACK_PARSE_SYSTEM,
@@ -105,8 +106,13 @@ async function fallbackDiscover(
   });
 
   if (!parsed.options || parsed.options.length === 0) {
-    throw new Error("Claude returned no options from Exa content");
+    throw new Error("LLM returned no options from Exa content");
   }
+
+  logger.info("discovery:fallback — parsed options", {
+    count: parsed.options.length,
+    options: parsed.options.map(o => ({ vendor: o.vendor, item: o.item, price: `SGD ${o.price}` })),
+  });
 
   return parsed.options;
 }
@@ -127,11 +133,12 @@ function toPaymentIntent(opt: DiscoveryOption): PaymentIntent {
 }
 
 export async function runDiscovery(intent: UserIntent): Promise<PaymentIntent[]> {
+  logger.section("PHASE 2 — EXA DISCOVERY");
   logger.info("discovery:start", { raw: intent.raw });
 
   const augmentedQuery = await augmentQuery(intent);
 
-  // Primary path: Exa Agent with up to 3 retries on transient errors
+  logger.info("discovery:exa-agent — launching (up to 3 retries on transient errors)");
   const agentOptions = await exaAgentWithRetry(augmentedQuery);
 
   let options: DiscoveryOption[];
@@ -141,16 +148,25 @@ export async function runDiscovery(intent: UserIntent): Promise<PaymentIntent[]>
     path = "agent";
     options = agentOptions;
   } else {
-    // Only reach here if all Agent retries were exhausted
     path = "fallback";
-    logger.warn("discovery — all Exa Agent attempts failed, falling back to searchAndContents + Claude");
+    logger.warn("discovery — all Exa Agent attempts failed, falling back to searchAndContents + LLM");
     options = await fallbackDiscover(augmentedQuery, intent);
   }
 
-  logger.info("discovery — path used", { path, count: options.length });
+  logger.info("discovery:path-used", { path, count: options.length });
 
   const paymentIntents = options.map(toPaymentIntent);
 
-  logger.info("discovery:complete", { count: paymentIntents.length });
+  logger.info("discovery:options-discovered", {
+    count: paymentIntents.length,
+    options: paymentIntents.map((o, i) => ({
+      rank: i + 1,
+      vendor: o.vendor,
+      item: o.item,
+      price: `SGD ${o.price}`,
+      url: o.order_url,
+    })),
+  });
+
   return paymentIntents;
 }

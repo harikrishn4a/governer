@@ -3,16 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "nodemon --exec ts-node src/index.ts",
+    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' nodemon --exec ts-node src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "test:discovery": "ts-node src/test-discovery.ts"
+    "start": "NODE_OPTIONS='--dns-result-order=ipv4first' node dist/index.js",
+    "test:discovery": "NODE_OPTIONS='--dns-result-order=ipv4first' ts-node src/test-discovery.ts",
+    "test:e2e": "NODE_OPTIONS='--dns-result-order=ipv4first' ts-node src/test-e2e.ts",
+    "test:phase5-db": "NODE_OPTIONS='--dns-result-order=ipv4first' ts-node src/test-phase5-db.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
+    "@stripe/agent-toolkit": "^0.9.0",
+    "@types/pg": "^8.20.0",
+    "dotenv": "^17.4.2",
     "exa-js": "^2.13.0",
     "express": "^4.21.0",
     "openai": "^6.42.0",
+    "pg": "^8.21.0",
+    "stripe": "^22.2.0",
     "uuid": "^10.0.0",
     "zod": "^3.23.0"
   },

@@ -3,49 +3,31 @@
 # TASK.md — Sprint Contract
 
 ## Feature
-- ID: feat-001
-- Title: Discovery pipeline — UserIntent → PaymentIntent[]
+- ID: feat-demo-flow
+- Title: Demo flow wiring — contract-tagged procurement + find/auction mode shell
 
 ## Scope — what will change
-- `apps/agents/src/agents/types.ts` — all shared types
-- `apps/agents/src/agents/procurement.ts` — parses raw text into UserIntent via LLM, calls discovery
-- `apps/agents/src/agents/discovery.ts` — augments query with LLM, runs Exa Agent, falls back to searchAndContents + Claude
-- `apps/agents/src/tools/exa.ts` — Exa Agent wrapper with 3-retry logic, text-field JSON fallback, searchAndContents fallback
-- `apps/agents/src/lib/llm.ts` — unified LLM wrapper (Claude + GPT-4o)
-- `apps/agents/src/lib/logger.ts` — structured JSON logger
-- `apps/agents/src/index.ts` — Express server POST /run + GET /health
-- `apps/agents/src/test-discovery.ts` — validation harness
-- `apps/agents/package.json`, `tsconfig.json`, `.env.example`
+- `docker-compose.yml` — postgres on host port 5433 (avoids Postgres.app conflict on 5432)
+- `governer/.env` — `DATABASE_URL` uses port 5433
+- `apps/agents/src/index.ts` — accept `mode` (find|auction), return contract metadata in `/run` response; auction returns 501
+- `apps/web/app/api/procure/route.ts` — require `contractId`, pass `mode`, surface agent `detail` errors
+- `apps/web/app/page.tsx` — mode toggle, contract sidebar, required contract selection, user-facing phase log (no graph), contract context in results
+- `apps/agents/.env.example` — document port 5433
 
 ## Exclusions — what will NOT change
-- No supplier agents (feat-002)
-- No procurement pick_winner logic (feat-002)
-- No governance agent (feat-003)
-- No Stripe integration (feat-004)
-- No web frontend (feat-005)
-- No SSE event bus (feat-005)
-- No database writes (feat-006)
-
-## Files expected to change
-- `apps/agents/src/agents/types.ts`
-- `apps/agents/src/agents/procurement.ts`
-- `apps/agents/src/agents/discovery.ts`
-- `apps/agents/src/tools/exa.ts`
-- `apps/agents/src/lib/llm.ts`
-- `apps/agents/src/lib/logger.ts`
-- `apps/agents/src/index.ts`
-- `apps/agents/src/test-discovery.ts`
+- No graph/bubble negotiation visualization
+- No SSE live event stream (still blocking POST)
+- No auction/flight search implementation
+- No dashboard budget-spent widget (deferred)
 
 ## Verification standard
-- `cd apps/agents && npm run test:discovery` — exits 0, prints VALIDATION PASSED, 5 options with all required fields
-
-## Acceptance criteria
-- Raw user text in → structured PaymentIntent[] out
-- Each PaymentIntent has: vendor, item, price (numeric SGD), order_url, description, why_pick
-- Exa Agent is the primary path; searchAndContents + LLM parsing is the fallback
-- Exa Agent retries up to 3 times on transient errors before falling back
-- Augmented query contains no delivery platform names
+- Docker postgres healthy on `localhost:5433`
+- `npm run test:phase5-db -- <food-spending-contract-id>` → PASSED
+- `GET /api/contracts/[id]/budget` → spent/remaining JSON
+- Dashboard shows budget panel + contract-filtered transactions
+- Find mode full UI run: food spending + burger intent → BLOCK or ACCEPT + row in dashboard
+- Auction mode: returns clear "not implemented" message
 
 ## Invariants — must remain true throughout
-- `npx tsc --noEmit` must pass with zero errors
-- `npm run test:discovery` must exit 0
+- `npx tsc --noEmit` (agents + web) → 0 errors
+- `docker compose config` validates
