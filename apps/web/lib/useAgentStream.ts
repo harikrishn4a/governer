@@ -17,6 +17,14 @@ export interface GraphState {
   winner?: string;
 }
 
+// One line in the live agent feed (consumed by components/AgentLog.tsx).
+export interface LogEntry {
+  id: string;
+  message: string;
+  timestamp: string; // ISO — AgentLog formats to HH:MM:SS
+  status: "pending" | "complete" | "error";
+}
+
 // Shape of the governance:complete event's `data` — the full result for the UI.
 export interface AgentResult {
   transactionId: string;
@@ -91,6 +99,37 @@ function toLog(e: StoredEvent): string | null {
 }
 
 /**
+ * Maps the raw event stream to feed lines with a lifecycle status:
+ *  - error / blocked decision → "error" (red dot)
+ *  - the most recent line     → "pending" (pulsing dot) until the stream terminates
+ *  - everything earlier        → "complete" (solid dot)
+ */
+function deriveLogs(events: StoredEvent[]): LogEntry[] {
+  const terminal = events.some((e) => isGovComplete(e) || e.type === "error");
+  const out: LogEntry[] = [];
+
+  for (const e of events) {
+    const message = toLog(e);
+    if (message === null) continue;
+    const d = (e.data ?? {}) as { decision?: string };
+    const isError = e.type === "error" || (isGovComplete(e) && d.decision === "BLOCK");
+    out.push({
+      id: String(e.seq ?? `${e.agent}-${e.timestamp}`),
+      message,
+      timestamp: e.timestamp,
+      status: isError ? "error" : "complete",
+    });
+  }
+
+  // Newest line keeps pulsing until governance completes (or errors).
+  const last = out[out.length - 1];
+  if (!terminal && last && last.status === "complete") {
+    out[out.length - 1] = { ...last, status: "pending" };
+  }
+  return out;
+}
+
+/**
  * Subscribes to /api/stream?txId= for the given transaction and derives UI state
  * from the agent events. Closes the stream on governance:complete.
  */
@@ -127,7 +166,7 @@ export function useAgentStream(transactionId: string | null | undefined) {
   }, [transactionId]);
 
   const graphState = useMemo(() => deriveGraph(events), [events]);
-  const logs = useMemo(() => events.map(toLog).filter((l): l is string => l !== null), [events]);
+  const logs = useMemo(() => deriveLogs(events), [events]);
   const result = useMemo(() => {
     const e = events.find(isGovComplete);
     return e ? (e.data as AgentResult) : undefined;

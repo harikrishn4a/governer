@@ -2,18 +2,9 @@
 
 import { useEffect, useState } from "react";
 import NodeGraph from "@/components/NodeGraph";
+import AgentLog from "@/components/AgentLog";
+import ResultCard, { type SupplierPitch } from "@/components/ResultCard";
 import { useAgentStream } from "@/lib/useAgentStream";
-
-interface SupplierPitch {
-  vendorId: string;
-  vendor: string;
-  item: string;
-  price: number;
-  pitch: string;
-  keyPoints: string[];
-  fitScore: number;
-  llmUsed: string;
-}
 
 interface Contract {
   id: string;
@@ -28,12 +19,6 @@ interface Contract {
 }
 
 type ProcureMode = "find" | "auction";
-
-const LLM_COLORS: Record<string, string> = {
-  "gpt-4o": "bg-accept-subtle text-accept-text",
-  "claude-sonnet-4-5": "bg-accent-purple-subtle text-accent-purple",
-  "gemini-1.5-flash": "bg-accent-blue-subtle text-accent-blue",
-};
 
 export default function ProcurePage() {
   const [intent, setIntent] = useState("");
@@ -245,149 +230,33 @@ export default function ProcurePage() {
         )}
       </section>
 
-      {/* Active layout: node graph (left) + live feed / result (right). */}
+      {/* Active layout: node graph (left) + live feed / result (right). The grid
+          is viewport-bounded so the feed fills available space and scrolls; when
+          the result card mounts it claims space below and the feed flex-shrinks —
+          a smooth height transition rather than a jump. */}
       {active && (
-        <section className="relative z-10 mx-auto mt-10 grid max-w-6xl grid-cols-[55fr_45fr] gap-6">
+        <section className="relative z-10 mx-auto mt-10 grid max-w-6xl grid-cols-[55fr_45fr] gap-6 lg:h-[calc(100vh-210px)] lg:min-h-[520px]">
           {/* Left — node graph */}
-          <div className="animate-col-rise" style={{ animationDelay: "200ms" }}>
+          <div className="animate-col-rise self-start" style={{ animationDelay: "200ms" }}>
             <NodeGraph graphState={graphState} contractName={selectedContract?.name} />
           </div>
 
-          {/* Right — live agent feed + result */}
-          <div className="animate-col-rise space-y-4" style={{ animationDelay: "320ms" }}>
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <p className="mb-3 text-overline uppercase text-text-muted">Agent activity</p>
-              {logs.length === 0 ? (
-                <p className="text-caption text-text-muted">Waiting for agents…</p>
-              ) : (
-                <ul className="space-y-2">
-                  {logs.map((l, i) => (
-                    <li key={i} className="animate-log-in flex items-start gap-2 text-body text-text-secondary">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-blue" />
-                      <span>{l}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          {/* Right — live agent feed + result card */}
+          <div className="animate-col-rise flex min-h-0 flex-col gap-4" style={{ animationDelay: "320ms" }}>
+            <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-border-subtle bg-surface p-4">
+              <AgentLog logs={logs} />
             </div>
 
             {result && (
-              <div className="animate-card-reveal space-y-4">
-                {/* Decision banner */}
-                <div
-                  className={`rounded-xl border p-5 ${
-                    overrideSuccess
-                      ? "border-review-border bg-review-subtle"
-                      : result.decision === "ACCEPT"
-                        ? "border-accept-border bg-accept-subtle"
-                        : "border-block-border bg-block-subtle"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-overline uppercase tracking-widest ${
-                        overrideSuccess
-                          ? "text-review-text"
-                          : result.decision === "ACCEPT"
-                            ? "text-accept-text"
-                            : "text-block-text"
-                      }`}
-                    >
-                      {overrideSuccess
-                        ? "Override · Approved"
-                        : result.decision === "ACCEPT"
-                          ? "✓ Accepted"
-                          : "✗ Blocked"}
-                    </span>
-                    {result.stripePaymentIntentId && (
-                      <span className="font-mono text-mono-sm text-text-muted">{result.stripePaymentIntentId}</span>
-                    )}
-                  </div>
-                  <p className="mt-3 font-display text-display-md text-text-primary">{result.vendor}</p>
-                  <p className="text-body text-text-secondary">{result.item}</p>
-                  <p className="mt-1 font-mono text-mono text-text-primary">
-                    {result.currency ?? "SGD"} {Number(result.price).toFixed(2)}
-                  </p>
-                  <p className="mt-3 text-body text-text-secondary">{result.rationale}</p>
-                  {result.decision === "BLOCK" && !overrideSuccess && (
-                    <button
-                      onClick={() => setShowBlockReview(true)}
-                      className="mt-4 rounded-lg bg-review px-4 py-2 text-label text-text-inverse transition hover:brightness-110 active:scale-[0.97]"
-                    >
-                      Request manual review
-                    </button>
-                  )}
-                </div>
-
-                {/* Why best value */}
-                {result.procurementRationale && (
-                  <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                    <p className="mb-1 text-overline uppercase text-text-muted">Why this is the best value</p>
-                    <p className="text-body text-text-secondary">{result.procurementRationale}</p>
-                  </div>
-                )}
-
-                {/* Governance rules */}
-                {result.checkedRules?.length > 0 && (
-                  <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                    <p className="mb-3 text-overline uppercase text-text-muted">Governance rules</p>
-                    <div className="space-y-2">
-                      {result.checkedRules.map((r, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <span className={`text-label ${r.passed ? "text-accept-text" : "text-block-text"}`}>
-                            {r.passed ? "✓" : "✗"}
-                          </span>
-                          <div>
-                            <span className="text-label text-text-secondary">{r.rule}</span>
-                            <span className="ml-2 text-caption text-text-muted">{r.detail}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Supplier pitches */}
-                {pitches.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-overline uppercase text-text-muted">Supplier pitches</p>
-                    {pitches.map((p, i) => {
-                      const isWinner = p.vendor.toLowerCase() === result.vendor.toLowerCase();
-                      return (
-                        <div
-                          key={i}
-                          className={`rounded-xl border p-4 ${
-                            isWinner ? "border-accent-purple bg-surface" : "border-border-subtle bg-surface"
-                          }`}
-                        >
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-label text-text-primary">{p.vendor}</span>
-                              {isWinner && (
-                                <span className="rounded-full bg-accent-purple-subtle px-2 py-0.5 text-caption text-accent-purple">
-                                  Winner
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`rounded px-2 py-0.5 text-caption ${
-                                  LLM_COLORS[p.llmUsed] ?? "bg-surface-raised text-text-muted"
-                                }`}
-                              >
-                                {p.llmUsed}
-                              </span>
-                              <span className="font-mono text-mono-sm text-text-secondary">
-                                SGD {p.price.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-body text-text-secondary">{p.pitch}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <div className="scroll-custom animate-card-reveal max-h-[62%] shrink-0 overflow-y-auto">
+                <ResultCard
+                  result={result}
+                  pitches={pitches}
+                  overrideSuccess={overrideSuccess}
+                  onRequestReview={() => setShowBlockReview(true)}
+                  budgetCap={selectedContract?.budget_cap}
+                  budgetPeriod={selectedContract?.budget_period}
+                />
               </div>
             )}
           </div>
