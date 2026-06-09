@@ -3,49 +3,44 @@
 # TASK.md — Sprint Contract
 
 ## Feature
-- ID: feat-001
-- Title: Discovery pipeline — UserIntent → PaymentIntent[]
+- ID: feat-phase3
+- Title: Governance agent + Stripe + DB + Web dashboard (Phase 3)
 
 ## Scope — what will change
-- `apps/agents/src/agents/types.ts` — all shared types
-- `apps/agents/src/agents/procurement.ts` — parses raw text into UserIntent via LLM, calls discovery
-- `apps/agents/src/agents/discovery.ts` — augments query with LLM, runs Exa Agent, falls back to searchAndContents + Claude
-- `apps/agents/src/tools/exa.ts` — Exa Agent wrapper with 3-retry logic, text-field JSON fallback, searchAndContents fallback
-- `apps/agents/src/lib/llm.ts` — unified LLM wrapper (Claude + GPT-4o)
-- `apps/agents/src/lib/logger.ts` — structured JSON logger
-- `apps/agents/src/index.ts` — Express server POST /run + GET /health
-- `apps/agents/src/test-discovery.ts` — validation harness
-- `apps/agents/package.json`, `tsconfig.json`, `.env.example`
+- docker-compose.yml — local postgres service
+- db/migrations/001_contracts.sql, 002_transactions.sql, 003_audit_events.sql
+- apps/agents/src/agents/supplier.ts — parameterised pitch agent (GPT-4o × 3, Claude if key present)
+- apps/agents/src/agents/procurement.ts — fan-out to supplier agents + pick_winner stub
+- apps/agents/src/agents/governance.ts — 5-rule governance agent with LLM + DB + HEAD checks
+- apps/agents/src/tools/db.ts — pg pool with typed query helpers
+- apps/agents/src/tools/stripe.ts — @stripe/agent-toolkit + direct Stripe functions
+- apps/agents/src/index.ts — accept contractId, run full pipeline through governance, save to DB
+- apps/agents/package.json — add stripe, @stripe/agent-toolkit, pg
+- apps/agents/.env / .env.example — add STRIPE_SECRET_KEY, DATABASE_URL
+- apps/web/ — full Next.js 14 + Tailwind scaffold (new directory)
+  - package.json, tsconfig.json, next.config.ts, tailwind.config.ts, postcss.config.mjs
+  - app/layout.tsx, app/globals.css
+  - app/page.tsx — procurement UI
+  - app/dashboard/page.tsx — governance dashboard
+  - app/api/procure/route.ts, contracts, override, transactions/[id]
+  - lib/db.ts, lib/stripe.ts
+  - .env.local.example
 
 ## Exclusions — what will NOT change
-- No supplier agents (feat-002)
-- No procurement pick_winner logic (feat-002)
-- No governance agent (feat-003)
-- No Stripe integration (feat-004)
-- No web frontend (feat-005)
-- No SSE event bus (feat-005)
-- No database writes (feat-006)
-
-## Files expected to change
-- `apps/agents/src/agents/types.ts`
-- `apps/agents/src/agents/procurement.ts`
-- `apps/agents/src/agents/discovery.ts`
-- `apps/agents/src/tools/exa.ts`
-- `apps/agents/src/lib/llm.ts`
-- `apps/agents/src/lib/logger.ts`
-- `apps/agents/src/index.ts`
-- `apps/agents/src/test-discovery.ts`
+- No real auth
+- No SSE event streaming (Phase 2 feature)
+- No Gemini supplier agent (no key; GPT-4o used as all 3 supplier LLMs)
+- No AWS CDK (Phase 7)
+- No S3 transcript upload
+- Query augmentation prompt — already fixed and correct
 
 ## Verification standard
-- `cd apps/agents && npm run test:discovery` — exits 0, prints VALIDATION PASSED, 5 options with all required fields
-
-## Acceptance criteria
-- Raw user text in → structured PaymentIntent[] out
-- Each PaymentIntent has: vendor, item, price (numeric SGD), order_url, description, why_pick
-- Exa Agent is the primary path; searchAndContents + LLM parsing is the fallback
-- Exa Agent retries up to 3 times on transient errors before falling back
-- Augmented query contains no delivery platform names
+- TEST 1 (happy path): POST /run with Default contract → ACCEPT, Stripe pi confirmed
+- TEST 2 (block path): POST /run with halal contract + burger → BLOCK, held Stripe pi
+- npm run dev (agents) — server starts, GET /health → 200
+- npm run dev (web) — Next.js app loads at localhost:3000
 
 ## Invariants — must remain true throughout
-- `npx tsc --noEmit` must pass with zero errors
-- `npm run test:discovery` must exit 0
+- npx tsc --noEmit (agents) → 0 errors
+- npm run test:discovery → still passes
+- Query augmentation must not name delivery platforms
