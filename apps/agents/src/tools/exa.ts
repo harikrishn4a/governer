@@ -17,7 +17,7 @@ const DISCOVERY_OUTPUT_SCHEMA = {
   properties: {
     options: {
       type: "array",
-      description: "List of purchasing options matching the user's intent",
+      description: "Exactly 5 purchasing options, each from a COMPLETELY DIFFERENT restaurant or vendor. No two items may share the same vendor. If you find multiple items at the same venue, pick only the best one and find a different vendor for the remaining slots.",
       items: {
         type: "object",
         properties: {
@@ -48,7 +48,7 @@ const DISCOVERY_OUTPUT_SCHEMA = {
         },
         required: ["vendor", "item", "price", "order_url", "description", "why_pick"],
       },
-      minItems: 3,
+      minItems: 5,
       maxItems: 5,
     },
   },
@@ -159,6 +159,20 @@ export async function exaAgentDiscover(task: string): Promise<DiscoveryOption[]>
 
   if (!options || options.length === 0) {
     throw new Error("Exa Agent completed but returned no structured options");
+  }
+
+  // Dedup check — throws so exaAgentWithRetry retries the entire run
+  const seen = new Set<string>();
+  const dupes: string[] = [];
+  for (const opt of options) {
+    const key = opt.vendor.trim().toLowerCase();
+    if (seen.has(key)) dupes.push(opt.vendor);
+    else seen.add(key);
+  }
+  if (dupes.length > 0) {
+    throw new Error(
+      `Duplicate vendors in Exa Agent results (will retry): ${dupes.join(", ")}`
+    );
   }
 
   return options;
