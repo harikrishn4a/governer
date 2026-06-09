@@ -1,23 +1,59 @@
 import { Pool } from "pg";
+import { config } from "dotenv";
+import path from "path";
+import dns from "dns/promises";
 
-let pool: Pool | null = null;
+config({ path: path.resolve(process.cwd(), "../../.env") });
 
-function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+let poolPromise: Promise<Pool> | null = null;
+
+async function buildPool(): Promise<Pool> {
+  const rawUrl = process.env.DATABASE_URL;
+  if (!rawUrl) throw new Error("DATABASE_URL is not set");
+
+  let connUrl = rawUrl;
+  try {
+    const u = new URL(rawUrl);
+    const addrs = await dns.resolve4(u.hostname);
+    if (addrs.length > 0) {
+      connUrl = rawUrl.replace(u.hostname, addrs[0]);
+      console.log(`[db] resolved ${u.hostname} → ${addrs[0]}`);
+    }
+  } catch (e) {
+    console.warn("[db] dns.resolve4 failed, using raw URL:", (e as Error).message);
   }
-  return pool;
+
+  return new Pool({
+    connectionString: connUrl,
+    ssl: rawUrl.includes("supabase") ? { rejectUnauthorized: false } : undefined,
+  });
+}
+
+function getPool(): Promise<Pool> {
+  if (!poolPromise) poolPromise = buildPool();
+  return poolPromise;
 }
 
 export async function getAllContracts() {
-  const { rows } = await getPool().query(
+  const pool = await getPool();
+  const { rows } = await pool.query(
     "SELECT * FROM spending_contracts ORDER BY created_at DESC"
   );
   return rows;
 }
 
+export async function getContractById(id: string) {
+  const pool = await getPool();
+  const { rows } = await pool.query(
+    "SELECT * FROM spending_contracts WHERE id = $1",
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
 export async function createContract(data: Record<string, unknown>) {
-  const { rows } = await getPool().query(
+  const pool = await getPool();
+  const { rows } = await pool.query(
     `INSERT INTO spending_contracts
       (name, budget_cap, budget_period, category_constraints, vendor_blocklist, vendor_allowlist, risk_threshold, active)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
@@ -36,6 +72,7 @@ export async function createContract(data: Record<string, unknown>) {
 }
 
 export async function updateContract(id: string, data: Record<string, unknown>) {
+  const pool = await getPool();
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
@@ -43,9 +80,8 @@ export async function updateContract(id: string, data: Record<string, unknown>) 
     fields.push(`${key} = $${i++}`);
     values.push(val);
   }
-  fields.push(`updated_at = NOW()`);
   values.push(id);
-  const { rows } = await getPool().query(
+  const { rows } = await pool.query(
     `UPDATE spending_contracts SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`,
     values
   );
@@ -53,16 +89,43 @@ export async function updateContract(id: string, data: Record<string, unknown>) 
 }
 
 export async function getAllTransactions() {
-  const { rows } = await getPool().query(
+  const pool = await getPool();
+  const { rows } = await pool.query(
     "SELECT * FROM transactions ORDER BY created_at DESC LIMIT 100"
   );
   return rows;
 }
 
 export async function getTransaction(id: string) {
-  const { rows } = await getPool().query(
+  const pool = await getPool();
+  const { rows } = await pool.query(
     "SELECT * FROM transactions WHERE id = $1",
     [id]
   );
   return rows[0] ?? null;
+}
+
+export async function getContractSpend(contractId: string, period: string): Promise<number> {
+  const pool = await getPool();
+  let since: string;
+  const now = new Date();
+  if (period === "daily") {
+    since = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  } else if (period === "weekly") {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    since = new Date(now.getFullYear(), now.getMonth(), diff).toISOString();
+  } else if (period === "monthly") {
+    since = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  } else {
+    return 0;
+  }
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(winner_price), 0) AS total FROM transactions
+     WHERE contract_id = $1
+       AND (governance_decision = 'ACCEPT' OR overridden_by IS NOT NULL)
+       AND created_at >= $2`,
+    [contractId, since]
+  );
+  return parseFloat(rows[0]?.total ?? "0");
 }

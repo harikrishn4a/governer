@@ -112,7 +112,9 @@ export async function getContractSpend(contractId: string, period: string): Prom
   }
   const { rows } = await getPool().query(
     `SELECT COALESCE(SUM(winner_price),0) AS total FROM transactions
-     WHERE contract_id=$1 AND governance_decision='ACCEPT' AND created_at >= $2`,
+     WHERE contract_id=$1
+       AND (governance_decision='ACCEPT' OR overridden_by IS NOT NULL)
+       AND created_at >= $2`,
     [contractId, since]
   );
   return parseFloat(rows[0]?.total ?? "0");

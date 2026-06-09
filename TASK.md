@@ -3,44 +3,31 @@
 # TASK.md — Sprint Contract
 
 ## Feature
-- ID: feat-phase3
-- Title: Governance agent + Stripe + DB + Web dashboard (Phase 3)
+- ID: feat-demo-flow
+- Title: Demo flow wiring — contract-tagged procurement + find/auction mode shell
 
 ## Scope — what will change
-- docker-compose.yml — local postgres service
-- db/migrations/001_contracts.sql, 002_transactions.sql, 003_audit_events.sql
-- apps/agents/src/agents/supplier.ts — parameterised pitch agent (GPT-4o × 3, Claude if key present)
-- apps/agents/src/agents/procurement.ts — fan-out to supplier agents + pick_winner stub
-- apps/agents/src/agents/governance.ts — 5-rule governance agent with LLM + DB + HEAD checks
-- apps/agents/src/tools/db.ts — pg pool with typed query helpers
-- apps/agents/src/tools/stripe.ts — @stripe/agent-toolkit + direct Stripe functions
-- apps/agents/src/index.ts — accept contractId, run full pipeline through governance, save to DB
-- apps/agents/package.json — add stripe, @stripe/agent-toolkit, pg
-- apps/agents/.env / .env.example — add STRIPE_SECRET_KEY, DATABASE_URL
-- apps/web/ — full Next.js 14 + Tailwind scaffold (new directory)
-  - package.json, tsconfig.json, next.config.ts, tailwind.config.ts, postcss.config.mjs
-  - app/layout.tsx, app/globals.css
-  - app/page.tsx — procurement UI
-  - app/dashboard/page.tsx — governance dashboard
-  - app/api/procure/route.ts, contracts, override, transactions/[id]
-  - lib/db.ts, lib/stripe.ts
-  - .env.local.example
+- `docker-compose.yml` — postgres on host port 5433 (avoids Postgres.app conflict on 5432)
+- `governer/.env` — `DATABASE_URL` uses port 5433
+- `apps/agents/src/index.ts` — accept `mode` (find|auction), return contract metadata in `/run` response; auction returns 501
+- `apps/web/app/api/procure/route.ts` — require `contractId`, pass `mode`, surface agent `detail` errors
+- `apps/web/app/page.tsx` — mode toggle, contract sidebar, required contract selection, user-facing phase log (no graph), contract context in results
+- `apps/agents/.env.example` — document port 5433
 
 ## Exclusions — what will NOT change
-- No real auth
-- No SSE event streaming (Phase 2 feature)
-- No Gemini supplier agent (no key; GPT-4o used as all 3 supplier LLMs)
-- No AWS CDK (Phase 7)
-- No S3 transcript upload
-- Query augmentation prompt — already fixed and correct
+- No graph/bubble negotiation visualization
+- No SSE live event stream (still blocking POST)
+- No auction/flight search implementation
+- No dashboard budget-spent widget (deferred)
 
 ## Verification standard
-- TEST 1 (happy path): POST /run with Default contract → ACCEPT, Stripe pi confirmed
-- TEST 2 (block path): POST /run with halal contract + burger → BLOCK, held Stripe pi
-- npm run dev (agents) — server starts, GET /health → 200
-- npm run dev (web) — Next.js app loads at localhost:3000
+- Docker postgres healthy on `localhost:5433`
+- `npm run test:phase5-db -- <food-spending-contract-id>` → PASSED
+- `GET /api/contracts/[id]/budget` → spent/remaining JSON
+- Dashboard shows budget panel + contract-filtered transactions
+- Find mode full UI run: food spending + burger intent → BLOCK or ACCEPT + row in dashboard
+- Auction mode: returns clear "not implemented" message
 
 ## Invariants — must remain true throughout
-- npx tsc --noEmit (agents) → 0 errors
-- npm run test:discovery → still passes
-- Query augmentation must not name delivery platforms
+- `npx tsc --noEmit` (agents + web) → 0 errors
+- `docker compose config` validates

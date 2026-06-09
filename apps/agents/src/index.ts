@@ -15,10 +15,21 @@ const PORT = parseInt(process.env.PORT ?? "4000", 10);
 
 // Full pipeline: intent → discovery → supplier pitches → negotiation → governance → Stripe → DB
 app.post("/run", async (req, res) => {
-  const { intent, contractId } = req.body as { intent?: string; contractId?: string };
+  const { intent, contractId, mode } = req.body as {
+    intent?: string;
+    contractId?: string;
+    mode?: "find" | "auction";
+  };
 
   if (!intent || typeof intent !== "string" || intent.trim() === "") {
     return res.status(400).json({ error: "intent is required" });
+  }
+
+  if (mode === "auction") {
+    return res.status(501).json({
+      error: "Auction mode is not implemented yet",
+      detail: "Use find mode for the burger demo. Auction mode (flight search) is planned for a later sprint.",
+    });
   }
 
   const requestStart = Date.now();
@@ -102,6 +113,10 @@ app.post("/run", async (req, res) => {
       requiresHumanReview: decision.requiresHumanReview,
       stripePaymentIntentId: decision.stripePaymentIntentId ?? null,
       procurementRationale: winner.procurementRationale,
+      contractId: contract.id,
+      contractName: contract.name,
+      contractBudgetCap: contract.budgetCap,
+      contractBudgetPeriod: contract.budgetPeriod,
       pitches,
       options,
     });

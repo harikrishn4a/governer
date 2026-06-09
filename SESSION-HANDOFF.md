@@ -1,99 +1,52 @@
-> **AgentBid session handoff** — Current session state for AI coding agents. This file is overwritten by the agent at the end of every session.
-
 # SESSION-HANDOFF.md
 
-## Date
-2026-06-09
+## Last session
+- **Date:** 2026-06-10
+- **Focus:** E2E phase 5+ verification, dashboard budget widget, contract-scoped transaction log, block review modals
 
-## What was completed this session (Phase 3)
-
-### Agents backend (all type-checks clean)
-- `apps/agents/src/agents/supplier.ts` — parallel supplier pitch agents (GPT-4o × 3), Promise.all fan-out
-- `apps/agents/src/agents/governance.ts` — 5-rule evaluation (INTENT_MATCH, BUDGET_CAP, CATEGORY_CONSTRAINT, VENDOR_BLOCKLIST, VENDOR_LEGITIMACY); ACCEPT → Stripe confirm; BLOCK → Stripe manual hold
-- `apps/agents/src/agents/procurement.ts` — updated with `runFullProcurement`: discovery → suppliers → pickWinner → governance
-- `apps/agents/src/tools/stripe.ts` — `executeAcceptedTransaction`, `executeBlockedTransaction`, `confirmHeldTransaction`, `initStripeAgentToolkit`
-- `apps/agents/src/tools/db.ts` — Pool singleton; contracts CRUD + period spend; transactions + audit events
-- `apps/agents/src/index.ts` — updated: POST /run (full pipeline), POST /discover, POST /override, GET /contracts, GET /health
-
-### Database
-- `docker-compose.yml` — postgres:15 service
-- `db/migrations/001_contracts.sql` — spending_contracts table + default seed (SGD 100, per_transaction, low risk)
-- `db/migrations/002_transactions.sql` — transactions table (full_result JSONB, overridden_by/at, stripe_payment_intent_id)
-- `db/migrations/003_audit_events.sql` — audit_events with FK indices
-
-### Web app (all type-checks clean, npm install done)
-- `apps/web/app/layout.tsx` — root layout with Procure / Dashboard nav
-- `apps/web/app/globals.css` — Tailwind base + slide-in keyframes
-- `apps/web/app/page.tsx` — procurement UI: intent input, contract selector, ACCEPT/BLOCK banner, supplier pitch cards, governance rules list, override button, discovery options table
-- `apps/web/app/dashboard/page.tsx` — governance dashboard: contracts list + CRUD form (TagInput), transaction log with expand rows, per-rule checklist, override button
-- `apps/web/app/api/procure/route.ts` — POST, proxies to agents /run
-- `apps/web/app/api/contracts/route.ts` — GET + POST direct DB
-- `apps/web/app/api/contracts/[id]/route.ts` — PATCH + DELETE direct DB
-- `apps/web/app/api/override/route.ts` — POST, proxies to agents /override
-- `apps/web/app/api/transactions/route.ts` — GET all
-- `apps/web/app/api/transactions/[id]/route.ts` — GET single
-- `apps/web/lib/db.ts` — web DB helpers (getAllContracts, createContract, updateContract, getAllTransactions, getTransaction)
-- `apps/web/lib/stripe.ts` — Stripe client singleton (apiVersion: "2026-05-27.dahlia")
-- `apps/web/.env.local.example` — all required env var placeholders
-
-## Verification status
-| Check | Result |
-|---|---|
-| `cd apps/agents && npx tsc --noEmit` | 0 errors |
-| `cd apps/web && npx tsc --noEmit` | 0 errors |
-| `cd apps/agents && npm run test:discovery` | PASSING (from prior session) |
-| TEST 1 — ACCEPT flow with Stripe | **NOT RUN** — waiting for STRIPE_SECRET_KEY |
-| TEST 2 — BLOCK flow (halal) with Stripe | **NOT RUN** — waiting for STRIPE_SECRET_KEY |
-
-## What to do next (after user adds API keys)
-
-### 1. Add keys to `.env`
-In `apps/agents/.env`:
+## Database
+```env
+DATABASE_URL=postgresql://agentbid:agentbid@localhost:5433/agentbid
 ```
-STRIPE_SECRET_KEY=sk_test_...
-DATABASE_URL=postgresql://agentbid:agentbid@localhost:5432/agentbid
-```
+Docker postgres on **5433** (Postgres.app uses 5432). Restart **both** dev servers after `.env` changes.
 
-In `apps/web/.env.local` (copy from `.env.local.example`):
-```
-DATABASE_URL=postgresql://agentbid:agentbid@localhost:5432/agentbid
-STRIPE_SECRET_KEY=sk_test_...
-AGENTS_BASE_URL=http://localhost:4000
-```
-
-### 2. Start postgres and run migrations
+## Verified this session
 ```bash
-docker-compose up -d postgres
-cd db && psql $DATABASE_URL -f migrations/001_contracts.sql
-cd db && psql $DATABASE_URL -f migrations/002_transactions.sql
-cd db && psql $DATABASE_URL -f migrations/003_audit_events.sql
+cd apps/agents && npm run test:phase5-db -- ae491a94-6472-455b-a304-9ba6c08d368f
+# → Phase 5+ DB test PASSED (food spending contract, BLOCK on Healthy constraint, tx saved)
+curl http://localhost:4000/contracts  # ✓
+curl http://localhost:3000/api/contracts/ae491a94-6472-455b-a304-9ba6c08d368f/budget  # ✓
 ```
 
-### 3. Start both servers
-```bash
-# Terminal 1
-cd apps/agents && npm run dev
+## Demo flow (find mode)
+1. `docker compose up -d postgres`
+2. `cd apps/agents && npm run dev`
+3. `cd apps/web && npm run dev`
+4. `/` → Find mode → select **food spending** → burger intent → Procure (~3 min)
+5. `/dashboard` → budget panel + transactions filtered by contract → Review block → Override
 
-# Terminal 2
-cd apps/web && npm run dev
-```
+## Contract tagging
+`contractId` required in UI and API. Pipeline loads contract in phase 5a, saves transaction under that contract.
 
-### 4. Run TEST 1 — happy path
-- Open http://localhost:3000
-- Type: "find me a good burger near Marina Bay Sands under $30"
-- Expected: governance ACCEPT, Stripe PI confirmed in test dashboard
+## food spending contract rules (demo notes)
+- Category: **Healthy** → burgers often **BLOCK** (good for override demo)
+- Blocklist: Black Tap
+- Budget: SGD 100 / weekly
 
-### 5. Run TEST 2 — halal BLOCK
-- Go to http://localhost:3000/dashboard
-- Create contract: budget $50, category constraint "halal certified restaurants only"
-- On main page, select that contract, same burger query
-- Expected: governance BLOCK, Stripe PI created but not confirmed
-- Click "Override and approve" → PI confirms
+## New scripts / APIs
+- `npm run test:phase5-db -- <contractId>` — fast phase 5+ test (skips 3-min discovery)
+- `GET /api/contracts/[id]/budget` — spent / remaining / percent used
 
-## Must not change
-- Query augmentation: no delivery platform names (GrabFood, Deliveroo, etc.)
-- Exa Agent: 3-retry wrapper, 300s poll timeout — working as designed
-- `llm.ts` auto-selection (Claude if ANTHROPIC_API_KEY, else GPT-4o)
-- `GovernanceDecision.requiresHumanReview` field — consumed by index.ts
-- Stripe apiVersion `"2026-05-27.dahlia"` — validated from node_modules
-- Governance failure → BLOCK (never auto-accept on inconclusive governance)
+## UI additions
+- Procure page: mode toggle, contract sidebar, phase log, block review modal
+- Dashboard: budget hero, contract filter on transactions, block review modal
+
+## Still deferred
+- SSE true live backend logs
+- Graph/bubble negotiation visualization
+- Auction / flight search mode
+
+## Next agent should
+1. Run full find-mode burger demo end-to-end from UI (3 min)
+2. Create **flight bookings** contract for future auction mode
+3. Implement SSE event stream OR auction flight search
