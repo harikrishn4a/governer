@@ -1,6 +1,6 @@
 {
-  "project": "{{PROJECT_NAME}}",
-  "last_updated": "YYYY-MM-DD",
+  "project": "AgentBid",
+  "last_updated": "2026-06-09",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -16,17 +16,120 @@
     {
       "id": "feat-001",
       "priority": 1,
-      "area": "{{AREA}}",
-      "title": "{{FEATURE_TITLE}}",
-      "user_visible_behavior": "{{WHAT_THE_USER_SEES}}",
+      "area": "agents",
+      "title": "Discovery pipeline — UserIntent → PaymentIntent[]",
+      "user_visible_behavior": "Raw purchase intent in, structured PaymentIntent[] out. Foundation for all downstream agent stages.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "cd apps/agents && npm run test:discovery"
+      ],
+      "evidence": [
+        "npm run test:discovery → VALIDATION PASSED — 5 options returned, all required fields present",
+        "Exa Agent mode: attempt 1, stopReason: schema_satisfied, cost: $0.50",
+        "Augmented query contains no platform names",
+        "Fallback path (searchAndContents + GPT-4o) also verified passing on timeout runs",
+        "npx tsc --noEmit → 0 errors"
+      ],
+      "agent_notes": "exa-js v2.13.0 used (Agent API at exa.beta.agent.runs). No ANTHROPIC_API_KEY in env — llm.ts auto-falls back to GPT-4o. Poll timeout is 300s; Exa Agent typically completes in 2–3 min. Timeout errors are non-transient (not retried). JSON parse and 5xx errors trigger up to 3 retries with 2s delay.",
+      "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-002",
+      "priority": 2,
+      "area": "agents",
+      "title": "Supplier pitch agents — parallel fan-out",
+      "user_visible_behavior": "Three supplier agents (GPT-4o, Claude, Gemini Flash) each advocate for one discovery option. Pitch cards shown in UI with vendor name, price, LLM badge, key points, and fit score bar.",
       "status": "not_started",
       "blocked_reason": "",
       "verification": [
-        "{{VERIFICATION_STEP}}"
+        "cd apps/agents && npm run test:discovery (extended to include supplier pitches)"
       ],
       "evidence": [],
       "agent_notes": "",
-      "last_updated": "YYYY-MM-DD"
+      "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-003",
+      "priority": 3,
+      "area": "agents",
+      "title": "Procurement orchestration — pick_winner",
+      "user_visible_behavior": "After supplier pitches, procurement agent selects the winning option with a rationale. Winning pitch card highlighted in UI.",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "cd apps/agents && curl -s -X POST localhost:4000/run -H 'Content-Type: application/json' -d '{\"intent\":\"burger near MBS under $30\"}' | jq .winner"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-004",
+      "priority": 4,
+      "area": "agents",
+      "title": "Governance agent + Stripe execution",
+      "user_visible_behavior": "ACCEPT/BLOCK badge with per-rule checklist. On ACCEPT a real Stripe test PaymentIntent is confirmed. On BLOCK the intent is held for human override.",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "cd apps/agents && curl POST /run and verify stripePaymentIntentId in response",
+        "Stripe test dashboard shows payment_intent.succeeded for ACCEPT flow",
+        "Stripe test dashboard shows requires_confirmation for BLOCK flow"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-005",
+      "priority": 5,
+      "area": "web",
+      "title": "Web frontend + SSE stream",
+      "user_visible_behavior": "Full procurement UI: intent input, live agent event timeline, supplier pitch cards, governance panel with override button, governance dashboard with contract management and audit log.",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "cd apps/web && npm run dev — app loads at localhost:3000",
+        "Submit an intent and verify agent events stream live in AgentStream component",
+        "Verify SupplierPitchCard, GovernancePanel, ContractForm, AuditLog all render"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-006",
+      "priority": 6,
+      "area": "db",
+      "title": "Database persistence",
+      "user_visible_behavior": "Audit log table in governance dashboard showing all transactions with decision, rationale, and per-rule breakdown. Persists across restarts.",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "docker compose up -d && psql $DATABASE_URL -f db/migrations/001_contracts.sql -f db/migrations/002_transactions.sql -f db/migrations/003_audit_events.sql",
+        "Run a procurement pipeline and verify rows appear in transactions and audit_events tables"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-007",
+      "priority": 7,
+      "area": "infra",
+      "title": "AWS infrastructure + deployment",
+      "user_visible_behavior": "Production app on Vercel + ECS Fargate. CloudWatch dashboard with agent metrics. S3 transcript bucket.",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "cdk deploy --all — all stacks deploy without error",
+        "curl https://<ECS_ALB>/health → {status: ok}",
+        "vercel --prod → web app live at Vercel URL"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-09"
     }
   ]
 }
