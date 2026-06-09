@@ -13,9 +13,10 @@ const QUERY_AUGMENT_SYSTEM = `You are a procurement intake agent. Your job is to
 Rules:
 - Restate exactly what the user wants to buy, where, and for how much
 - Specify that the response must include: vendor name, item name, exact price in SGD, and a direct URL to order or view the item
-- Ask for variety across different vendors (not multiple items from the same place)
 - Do NOT name any delivery platform, marketplace, or search source — Exa decides where to look
 - Do NOT add instructions about how to search — only describe the purchase
+
+IMPORTANT: Each option must be from a DIFFERENT vendor/restaurant. Never return two options from the same place. If you only find one good option at a venue, move on to the next vendor.
 
 Return ONLY the restated query as plain text. No explanations.`;
 
@@ -61,8 +62,11 @@ async function augmentQuery(intent: UserIntent): Promise<string> {
     maxTokens: 200,
   });
 
-  logger.info("discovery:augment — done", { augmented: augmented.trim() });
-  return augmented.trim();
+  const base = augmented.trim();
+  const withVariety = `${base} Return exactly 5 options, each from a DIFFERENT restaurant or vendor. Do not list multiple items from the same restaurant.`;
+
+  logger.info("discovery:augment — done", { augmented: withVariety });
+  return withVariety;
 }
 
 async function fallbackDiscover(
