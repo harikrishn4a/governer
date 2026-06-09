@@ -2,15 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * AgentBid color system — dark, terminal-meets-financial-dashboard.
+ * Aesthetic direction: "premium control room" (Linear + Bloomberg terminal).
+ * Scheme: cool desaturated blue-gray dominant (recedes) + analogous blue→purple
+ * accents + conventional functional semantics (green/red/amber) used sparingly.
+ * Full rationale + token reference in /DESIGN-SYSTEM.md.
+ */
+
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-rgb: 248, 250, 252;
+  color-scheme: dark;
+
+  /* ---- Background hierarchy (cool blue-black ramp, never pure #000) ---- */
+  --bg: #0b0e14;             /* page background — coolest, deepest, recedes */
+  --surface: #12161f;        /* panels, cards */
+  --surface-raised: #1b2130; /* modals, popovers, hovered rows — steps forward */
+  --border-subtle: #1e2632;  /* hairlines within a surface */
+  --border: #2a3342;         /* visible dividers, input borders */
+
+  /* ---- Text (warm-leaning primary pops; cooler grays recede) ---- */
+  --text-primary: #e6eaf1;   /* headings, key values */
+  --text-secondary: #9ba6b7; /* body, descriptions */
+  --text-muted: #5e6b7e;     /* labels, metadata, timestamps */
+  --text-inverse: #0b0e14;   /* text on solid accent/semantic fills */
+
+  /* ---- Accents (analogous: blue = action, purple = governance) ---- */
+  --accent-blue: #4c8fff;
+  --accent-blue-hover: #6ba5ff;
+  --accent-blue-subtle: rgba(76, 143, 255, 0.12);
+  --accent-purple: #9d7bff;
+  --accent-purple-hover: #b197ff;
+  --accent-purple-subtle: rgba(157, 123, 255, 0.12);
+
+  /* ---- Semantic: ACCEPT (green = success convention) ---- */
+  --accept: #22c55e;
+  --accept-text: #4ade80;
+  --accept-border: rgba(34, 197, 94, 0.35);
+  --accept-subtle: rgba(34, 197, 94, 0.12);
+
+  /* ---- Semantic: BLOCK (red = error/urgency convention) ---- */
+  --block: #ef4444;
+  --block-text: #f87171;
+  --block-border: rgba(239, 68, 68, 0.35);
+  --block-subtle: rgba(239, 68, 68, 0.12);
+
+  /* ---- Semantic: REVIEW / PENDING (amber = attention/highlight) ---- */
+  --review: #f59e0b;
+  --review-text: #fbbf24;
+  --review-border: rgba(245, 158, 11, 0.35);
+  --review-subtle: rgba(245, 158, 11, 0.12);
+
+  /* ---- Node graph (pair with shape/label/motion — never color alone) ---- */
+  --node-broadcast: #4c8fff; /* origin pulse / search broadcast (blue) */
+  --node-vendor: #8b97a8;    /* neutral discovered participant (cool slate) */
+  --node-contract: #9d7bff;  /* governance contract (purple) */
+  --node-winner: #22c55e;    /* selected vendor (green) */
+  --node-loser: #4a5462;     /* eliminated vendor — dim, recedes */
+
+  /* ---- Elevation: hue-shifted cool shadow, not pure black ---- */
+  --shadow-sm: 0 1px 2px rgba(5, 8, 14, 0.4);
+  --shadow-md: 0 4px 16px rgba(5, 8, 14, 0.5);
+  --shadow-lg: 0 16px 48px rgba(5, 8, 14, 0.6);
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text-primary);
+  background: var(--bg);
+  /* UI grotesque (IBM Plex Sans) is the default; see DESIGN-SYSTEM.md §6. */
+  font-family: var(--font-ui), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.875rem; /* 14px base — dense, financial */
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-blue-subtle);
 }
 
 .agent-event-enter {
@@ -20,4 +87,57 @@ body {
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+ * Motion system — see /MOTION.md for the full spec.
+ * Only transform + opacity are animated (GPU-composited, 60fps).
+ * ============================================================ */
+:root {
+  /* Durations — 100/300/500 rule + role-specific */
+  --motion-micro: 100ms;       /* hover, button press */
+  --motion-standard: 300ms;    /* panels, node entrance, state swaps */
+  --motion-complex: 500ms;     /* idle→active column rise, orchestration */
+  --motion-log-line: 200ms;    /* one log line entering */
+  --motion-result-card: 360ms; /* result card reveal */
+  --motion-hero-exit: 240ms;   /* idle hero leaving */
+
+  /* Easing — exponential; NEVER bounce/elastic */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);  /* entries (decelerate in) */
+  --ease-in-expo: cubic-bezier(0.7, 0, 0.84, 0);   /* exits (accelerate away) */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);   /* toggles, position, pulses */
+
+  /* Stagger increments */
+  --stagger-vendor: 150ms;
+  --stagger-log: 80ms;
+
+  /* Looping pulse cycles */
+  --pulse-broadcast: 1500ms;   /* broadcast heartbeat */
+  --pulse-active: 800ms;       /* pitching vendor — faster */
+}
+
+/* Glow layer: an absolutely-positioned blurred disc behind a node. We animate
+ * its opacity/scale (composited) instead of box-shadow (paint) for 60fps. */
+.node-glow {
+  position: absolute;
+  inset: -40%;
+  border-radius: 9999px;
+  filter: blur(12px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Stagger helper: set style={{ '--i': index }} on each child. */
+.stagger-vendors > * { animation-delay: calc(var(--stagger-vendor) * var(--i, 0)); }
+.stagger-logs > *    { animation-delay: calc(var(--stagger-log) * var(--i, 0)); }
+
+/* Accessibility: honor reduced-motion. State is still communicated by COLOR
+ * (winner green, loser dim) — only the movement is removed. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
