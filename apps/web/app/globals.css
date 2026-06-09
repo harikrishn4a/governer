@@ -65,6 +65,11 @@
   --shadow-lg: 0 16px 48px rgba(5, 8, 14, 0.6);
 }
 
+html {
+  /* Dark canvas is the default — no white flash / overscroll gutter. */
+  background: var(--bg);
+}
+
 body {
   color: var(--text-primary);
   background: var(--bg);
