@@ -123,13 +123,15 @@ export async function getContractSpend(contractId: string, period: string): Prom
 // ── Transactions ────────────────────────────────────────────────────────────
 
 export async function saveTransaction(tx: TransactionRecord): Promise<string> {
+  // When an explicit id is supplied (so the SSE stream id === DB id) we insert it;
+  // otherwise the DB default (gen_random_uuid) generates one.
   const { rows } = await getPool().query(
     `INSERT INTO transactions
-       (user_intent, contract_id, winner_vendor, winner_item, winner_price,
+       (id, user_intent, contract_id, winner_vendor, winner_item, winner_price,
         governance_decision, rationale, checked_rules, requires_human_review,
         stripe_payment_intent_id, stripe_status, full_result)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-    [tx.user_intent, tx.contract_id, tx.winner_vendor, tx.winner_item, tx.winner_price,
+     VALUES (COALESCE($1::uuid, gen_random_uuid()),$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+    [tx.id ?? null, tx.user_intent, tx.contract_id, tx.winner_vendor, tx.winner_item, tx.winner_price,
      tx.governance_decision, tx.rationale, JSON.stringify(tx.checked_rules),
      tx.requires_human_review, tx.stripe_payment_intent_id ?? null,
      tx.stripe_status ?? null, JSON.stringify(tx.full_result)]

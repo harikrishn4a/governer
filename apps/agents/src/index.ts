@@ -7,6 +7,9 @@ import { runGovernance } from "./agents/governance";
 import { getActiveContract, saveTransaction, saveAuditEvent, getAllContracts, getTransaction } from "./tools/db";
 import { confirmHeldTransaction } from "./tools/stripe";
 import { logger } from "./lib/logger";
+import { createEmitter } from "./lib/event-bus";
+import type { AgentEvent } from "./agents/types";
+import { randomUUID } from "crypto";
 
 const app = express();
 app.use(express.json());
@@ -15,10 +18,11 @@ const PORT = parseInt(process.env.PORT ?? "4000", 10);
 
 // Full pipeline: intent → discovery → supplier pitches → negotiation → governance → Stripe → DB
 app.post("/run", async (req, res) => {
-  const { intent, contractId, mode } = req.body as {
+  const { intent, contractId, mode, txId: incomingTxId } = req.body as {
     intent?: string;
     contractId?: string;
     mode?: "find" | "auction";
+    txId?: string;
   };
 
   if (!intent || typeof intent !== "string" || intent.trim() === "") {
@@ -32,18 +36,29 @@ app.post("/run", async (req, res) => {
     });
   }
 
+  // txId is supplied by the web /api/procure (so it can return immediately and
+  // subscribe to the stream). Fall back to a fresh id for direct callers/tests.
+  // This same id is used for every stream event AND as the DB transaction id.
+  const txId = incomingTxId?.trim() || randomUUID();
+  const emit = createEmitter(txId);
+  // Ergonomic wrapper for this handler's own emits (procurement events are
+  // emitted inside runFullProcurement via the same `emit`).
+  const fire = (type: AgentEvent["type"], agent: string, data?: unknown) =>
+    emit({ type, agent, data, timestamp: new Date().toISOString() });
+
   const requestStart = Date.now();
 
   try {
     logger.section("POST /run — AGENTBID FULL PIPELINE");
     logger.info("request:received", {
+      txId,
       intent: intent.trim(),
       contractId: contractId ?? "(default)",
       timestamp: new Date().toISOString(),
     });
 
-    // ── Phase 1-4: procurement pipeline ──────────────────────────────────────
-    const { intent: parsedIntent, options, pitches, winner } = await runFullProcurement(intent.trim());
+    // ── Phase 1-4: procurement pipeline (emits start/discovery/supplier/procurement) ──
+    const { intent: parsedIntent, options, pitches, winner } = await runFullProcurement(intent.trim(), emit);
 
     // ── Phase 5: load contract ────────────────────────────────────────────────
     logger.section("PHASE 5a — CONTRACT LOAD");
@@ -59,11 +74,13 @@ app.post("/run", async (req, res) => {
     });
 
     // ── Phase 6-7: governance + Stripe ───────────────────────────────────────
+    await fire("agent:start", "governance");
     const decision = await runGovernance(winner, parsedIntent, contract);
 
-    // ── Phase 8: persist to DB ────────────────────────────────────────────────
+    // ── Phase 8: persist to DB (reuse txId so stream id === DB id) ────────────
     logger.section("PHASE 7 — DATABASE PERSIST");
-    const txId = await saveTransaction({
+    await saveTransaction({
+      id: txId,
       user_intent: intent.trim(),
       contract_id: contract.id,
       winner_vendor: winner.vendor,
@@ -86,6 +103,27 @@ app.post("/run", async (req, res) => {
     });
 
     logger.info("db:saved", { transactionId: txId, auditEvent: decision.decision });
+
+    // ── Emit governance:complete — carries the full result for the UI ─────────
+    await fire("agent:complete", "governance", {
+      transactionId: txId,
+      decision: decision.decision,
+      vendor: winner.vendor,
+      item: winner.item,
+      price: winner.price,
+      currency: "SGD",
+      rationale: decision.rationale,
+      checkedRules: decision.checkedRules,
+      requiresHumanReview: decision.requiresHumanReview,
+      stripePaymentIntentId: decision.stripePaymentIntentId ?? null,
+      procurementRationale: winner.procurementRationale,
+      contractId: contract.id,
+      contractName: contract.name,
+      contractBudgetCap: contract.budgetCap,
+      contractBudgetPeriod: contract.budgetPeriod,
+      pitches,
+      options,
+    });
 
     // ── Summary ───────────────────────────────────────────────────────────────
     const totalMs = Date.now() - requestStart;
@@ -123,6 +161,7 @@ app.post("/run", async (req, res) => {
   } catch (err) {
     const totalMs = Date.now() - requestStart;
     logger.error("pipeline:failed", { error: String(err), totalMs });
+    await fire("error", "pipeline", { message: String(err) });
     return res.status(500).json({ error: "Pipeline failed", detail: String(err) });
   }
 });

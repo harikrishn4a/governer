@@ -3,7 +3,10 @@ import { logger } from "../lib/logger";
 import { runDiscovery } from "./discovery";
 import { runSupplierAgents } from "./supplier";
 import { callNegotiationAPI } from "../tools/negotiate";
-import type { UserIntent, PaymentIntent, SupplierPitch, WinnerPaymentIntent } from "./types";
+import type { UserIntent, PaymentIntent, SupplierPitch, WinnerPaymentIntent, AgentEvent } from "./types";
+
+// Optional sink for live agent events. Pipeline progress must never depend on it.
+type OnEvent = (e: AgentEvent) => Promise<void> | void;
 
 const INTENT_PARSE_SYSTEM = `You are a procurement intake agent. Parse a user's natural language purchase intent into structured fields.
 
@@ -95,7 +98,7 @@ export async function runProcurement(rawInput: string): Promise<PaymentIntent[]>
   return options;
 }
 
-export async function runFullProcurement(rawInput: string): Promise<{
+export async function runFullProcurement(rawInput: string, onEvent?: OnEvent): Promise<{
   intent: UserIntent;
   options: PaymentIntent[];
   pitches: SupplierPitch[];
@@ -104,8 +107,34 @@ export async function runFullProcurement(rawInput: string): Promise<{
   logger.section("AGENTBID PROCUREMENT PIPELINE — START");
   logger.info("pipeline:start", { input: rawInput, timestamp: new Date().toISOString() });
 
+  // Emit a live event without ever throwing into the pipeline.
+  const emit = async (type: AgentEvent["type"], agent: string, data?: unknown) => {
+    try {
+      await onEvent?.({ type, agent, data, timestamp: new Date().toISOString() });
+    } catch {
+      /* telemetry must never break the pipeline */
+    }
+  };
+
+  await emit("agent:start", "procurement");
+
   const intent = await parseIntent(rawInput);
+
   const options = await runDiscovery(intent);
+  await emit("agent:complete", "discovery", {
+    count: options.length,
+    vendors: options.map((o) => o.vendor),
+  });
+
+  // Supplier agents pitch on the top candidates (mirrors runSupplierAgents' slice).
+  const candidates = options.slice(0, 3);
+  for (let i = 0; i < candidates.length; i++) {
+    await emit("agent:start", `supplier_${i}`, {
+      vendor: candidates[i].vendor,
+      item: candidates[i].item,
+    });
+  }
+
   const pitches = await runSupplierAgents(options, intent);
 
   // ── Winner selection via negotiation API ──────────────────────────────────
@@ -151,6 +180,13 @@ export async function runFullProcurement(rawInput: string): Promise<{
     score: winner.score,
     withinBudget: winner.withinBudget,
     selectionMethod: winner.procurementRationale.startsWith("[FALLBACK]") ? "fitScore-fallback" : "negotiation-api",
+  });
+
+  await emit("agent:complete", "procurement", {
+    vendor: winner.vendor,
+    item: winner.item,
+    price: winner.price,
+    rationale: winner.procurementRationale,
   });
 
   return { intent, options, pitches, winner };
