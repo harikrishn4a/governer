@@ -22,6 +22,12 @@ interface Contract {
   created_at: string;
 }
 
+interface CheckedRule {
+  rule: string;
+  passed: boolean;
+  detail: string;
+}
+
 interface Transaction {
   id: string;
   contract_id: string;
@@ -35,11 +41,65 @@ interface Transaction {
   overridden_by?: string;
   created_at: string;
   rationale?: string;
+  checked_rules?: CheckedRule[];
   full_result?: {
-    checkedRules?: Array<{ rule: string; passed: boolean; detail: string }>;
+    pitches?: Array<{ vendor?: string; price?: number }>;
+    winner?: { procurementRationale?: string; price?: number };
+    checkedRules?: CheckedRule[];
     rationale?: string;
-    decision?: { rationale?: string; checkedRules?: Array<{ rule: string; passed: boolean; detail: string }> };
+    decision?: {
+      rationale?: string;
+      checkedRules?: CheckedRule[];
+    };
   };
+}
+
+function txRationale(tx: Transaction): string {
+  return (
+    tx.rationale ??
+    tx.full_result?.decision?.rationale ??
+    tx.full_result?.rationale ??
+    ""
+  );
+}
+
+function txCheckedRules(tx: Transaction): CheckedRule[] {
+  return (
+    tx.checked_rules ??
+    tx.full_result?.checkedRules ??
+    tx.full_result?.decision?.checkedRules ??
+    []
+  );
+}
+
+function txAdvantagePills(
+  tx: Transaction,
+  contract?: Contract
+): Array<{ icon: string; text: string; tone: "good" | "warn" }> {
+  const pills: Array<{ icon: string; text: string; tone: "good" | "warn" }> = [];
+  const price = Number(tx.winner_price);
+  if (contract && Number.isFinite(price)) {
+    const diff = Number(contract.budget_cap) - price;
+    pills.push(
+      diff >= 0
+        ? { icon: "💰", text: `SGD ${Math.round(diff)} under budget`, tone: "good" }
+        : { icon: "⚠️", text: `SGD ${Math.round(-diff)} over budget`, tone: "warn" }
+    );
+  }
+  const pitches = tx.full_result?.pitches ?? [];
+  const priciest = pitches.reduce((m, p) => Math.max(m, Number(p.price) || 0), 0);
+  if (priciest > price) {
+    pills.push({
+      icon: "📉",
+      text: `SGD ${(priciest - price).toFixed(2)} below the priciest bid`,
+      tone: "good",
+    });
+  }
+  return pills;
+}
+
+function txProcurementAdvantage(tx: Transaction): string | undefined {
+  return tx.full_result?.winner?.procurementRationale?.trim() || undefined;
 }
 
 interface BudgetSummary {
@@ -245,13 +305,19 @@ export default function DashboardPage() {
   const selectedContract = contracts.find(c => c.id === selectedContractId);
 
   const filteredTx = transactions.filter(t => {
-    if (selectedContractId && t.contract_id !== selectedContractId) return false;
-    return filterDecision === "ALL" || t.governance_decision === filterDecision;
+    if (selectedContractId && String(t.contract_id) !== String(selectedContractId)) return false;
+    if (filterDecision === "ALL") return true;
+    if (filterDecision === "ACCEPT") {
+      return t.governance_decision === "ACCEPT" || !!t.overridden_by;
+    }
+    if (filterDecision === "BLOCK") {
+      return t.governance_decision === "BLOCK" && !t.overridden_by;
+    }
+    return t.governance_decision === filterDecision;
   });
 
   function getFailedRules(tx: Transaction) {
-    const rules = tx.full_result?.checkedRules ?? tx.full_result?.decision?.checkedRules ?? [];
-    return rules.filter(r => !r.passed);
+    return txCheckedRules(tx).filter((r) => !r.passed);
   }
 
   const inputCls = "w-full bg-surface-raised border border-border rounded px-2 py-1 text-label text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent-blue";
@@ -606,7 +672,14 @@ export default function DashboardPage() {
         {/* Right: Transactions */}
         <div className="lg:col-span-3">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-display-md text-text-primary">Transaction Log</h2>
+            <h2 className="font-display text-display-md text-text-primary">
+              Transaction Log
+              {selectedContract && (
+                <span className="ml-2 text-body font-normal text-text-muted">
+                  · {filteredTx.length} for {selectedContract.name.trim()}
+                </span>
+              )}
+            </h2>
             <select value={filterDecision} onChange={e => setFilterDecision(e.target.value)}
               className="text-caption bg-surface-raised border border-border rounded px-2 py-1 text-text-secondary focus:outline-none">
               <option value="ALL">All</option>
@@ -616,25 +689,58 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-2">
-            {filteredTx.map(tx => (
+            {filteredTx.map(tx => {
+              const rationale = txRationale(tx);
+              const pills = txAdvantagePills(tx, selectedContract);
+              const procurementAdvantage = txProcurementAdvantage(tx);
+              const rules = txCheckedRules(tx);
+
+              return (
               <div key={tx.id} className="bg-surface border border-border rounded-xl overflow-hidden">
                 <div
-                  className="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-surface-raised"
+                  className="px-4 py-3 flex items-start justify-between gap-4 cursor-pointer hover:bg-surface-raised"
                   onClick={() => setExpandedTx(expandedTx === tx.id ? null : tx.id)}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className={`text-caption font-bold px-2 py-0.5 rounded ${
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span className={`shrink-0 text-caption font-bold px-2 py-0.5 rounded ${
                       tx.overridden_by ? "bg-review-subtle text-review-text" :
                       tx.governance_decision === "ACCEPT" ? "bg-accept-subtle text-accept-text" : "bg-block-subtle text-block-text"
                     }`}>
                       {tx.overridden_by ? "OVERRIDE" : tx.governance_decision}
                     </span>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-label font-medium text-text-primary">{tx.winner_vendor} — {tx.winner_item}</p>
-                      <p className="text-caption text-text-muted">{tx.user_intent}</p>
+                      <p className="text-caption text-text-muted line-clamp-1">{tx.user_intent}</p>
+                      {rationale && (
+                        <p className="mt-1.5 text-caption leading-snug text-text-secondary line-clamp-2">
+                          {rationale}
+                        </p>
+                      )}
+                      {(pills.length > 0 || procurementAdvantage) && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {pills.map((p, i) => (
+                            <span
+                              key={i}
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.68rem] font-medium ${
+                                p.tone === "good"
+                                  ? "bg-accept-subtle text-accept-text"
+                                  : "bg-block-subtle text-block-text"
+                              }`}
+                            >
+                              <span aria-hidden>{p.icon}</span>
+                              {p.text}
+                            </span>
+                          ))}
+                          {procurementAdvantage && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-accent-blue-subtle px-2 py-0.5 text-[0.68rem] font-medium text-accent-blue">
+                              ✦ {procurementAdvantage.length > 72 ? `${procurementAdvantage.slice(0, 72)}…` : procurementAdvantage}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <p className="text-label font-semibold text-text-secondary font-mono">SGD {Number(tx.winner_price).toFixed(2)}</p>
                     <p className="text-caption text-text-muted">{new Date(tx.created_at).toLocaleString()}</p>
                   </div>
@@ -645,11 +751,11 @@ export default function DashboardPage() {
                     {tx.stripe_payment_intent_id && (
                       <p className="text-mono-sm text-text-muted font-mono">Stripe: {tx.stripe_payment_intent_id}</p>
                     )}
-                    {(tx.full_result?.checkedRules ?? tx.full_result?.decision?.checkedRules) && (
+                    {rules.length > 0 && (
                       <div>
                         <p className="text-overline uppercase text-text-muted mb-2">Governance rules</p>
                         <div className="space-y-1.5">
-                          {(tx.full_result?.checkedRules ?? tx.full_result?.decision?.checkedRules ?? []).map((r, i) => (
+                          {rules.map((r, i) => (
                             <div key={i} className="flex items-start gap-2">
                               <span className={`text-body ${r.passed ? "text-accept-text" : "text-block-text"}`}>{r.passed ? "✓" : "✗"}</span>
                               <div>
@@ -684,7 +790,8 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-            ))}
+            );
+            })}
             {filteredTx.length === 0 && (
               <div className="bg-surface border border-border rounded-xl py-12 text-center">
                 <p className="text-body text-text-muted">No transactions for this contract yet</p>
@@ -700,7 +807,7 @@ export default function DashboardPage() {
             <h3 className="font-display text-display-md text-text-primary mb-1">Transaction blocked</h3>
             <p className="text-body text-text-secondary mb-4 font-mono">{reviewTx.winner_vendor} — {reviewTx.winner_item} · SGD {Number(reviewTx.winner_price).toFixed(2)}</p>
             <p className="text-body text-block-text bg-block-subtle border border-block-border rounded-lg p-3 mb-4">
-              {reviewTx.rationale ?? reviewTx.full_result?.rationale ?? reviewTx.full_result?.decision?.rationale ?? "Governance rules failed."}
+              {txRationale(reviewTx) || "Governance rules failed."}
             </p>
             <p className="text-overline uppercase text-text-muted mb-2">Failed rules</p>
             <ul className="space-y-2 mb-6">
