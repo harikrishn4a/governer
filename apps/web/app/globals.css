@@ -227,6 +227,22 @@ body {
 /* Score / fill bar grow. */
 .tk-bar { transition: width 900ms var(--ease-out-expo); }
 
+/* Node recoil — a vendor "flinching" when the buyer agent challenges it. */
+.tk-shake { animation: tk-shake 0.5s var(--ease-in-out) infinite; }
+@keyframes tk-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2.5px); }
+  75% { transform: translateX(2.5px); }
+}
+
+/* Node soft glow pulse (active speaker). */
+.tk-nodeglow { animation: tk-nodeglow 1.4s var(--ease-in-out) infinite; }
+@keyframes tk-nodeglow { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.4; } }
+
+/* Round caption cross-fade. */
+.tk-fade { animation: tk-fade 400ms var(--ease-out-expo); }
+@keyframes tk-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
 /* The vertical pipeline connector fill. */
 .tk-railfill { transition: height 700ms var(--ease-in-out); }
 
