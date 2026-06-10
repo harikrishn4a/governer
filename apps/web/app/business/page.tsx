@@ -3,7 +3,6 @@ import { useState, useRef, useEffect } from "react";
 import {
   TONE_OPTIONS,
   STYLE_OPTIONS,
-  DIETARY_OPTIONS,
   LANGUAGE_OPTIONS,
   EMPHASIS_OPTIONS,
 } from "@/app/lib/persona";
@@ -11,7 +10,6 @@ import {
 type Persona = {
   tone: string;
   languageStyle: string;
-  dietary: string[];
   languages: string[];
   emphasis: string[];
   tagline: string;
@@ -21,7 +19,6 @@ type Persona = {
 const EMPTY_PERSONA: Persona = {
   tone: "friendly",
   languageStyle: "standard",
-  dietary: [],
   languages: [],
   emphasis: [],
   tagline: "",
@@ -71,7 +68,7 @@ export default function BusinessPortal() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  function toggle(field: "dietary" | "languages" | "emphasis", value: string) {
+  function toggle(field: "languages" | "emphasis", value: string) {
     setPersonaSaved(false);
     setPersona((p) => {
       const has = p[field].includes(value);
@@ -390,12 +387,6 @@ export default function BusinessPortal() {
                   <button key={o.value} title={o.hint}
                     onClick={() => { setPersona((p) => ({ ...p, languageStyle: o.value })); setPersonaSaved(false); }}
                     className={pill(persona.languageStyle === o.value)}>{o.label}</button>
-                ))}
-              </PersonaGroup>
-
-              <PersonaGroup label="Dietary positioning" hint="(only pick what's genuinely true)">
-                {DIETARY_OPTIONS.map((o) => (
-                  <button key={o.value} onClick={() => toggle("dietary", o.value)} className={pill(persona.dietary.includes(o.value))}>{o.label}</button>
                 ))}
               </PersonaGroup>
 

@@ -35,7 +35,10 @@ export interface Business {
   conversationHistory: { role: "user" | "assistant"; content: string }[];
 }
 
-const DATA_PATH = path.join(process.cwd(), "data", "businesses.json");
+const DATA_PATH =
+  process.env.VERCEL === "1"
+    ? path.join("/tmp", "agentbid-businesses.json")
+    : path.join(process.cwd(), "data", "businesses.json");
 
 function ensureDataDir() {
   const dir = path.dirname(DATA_PATH);

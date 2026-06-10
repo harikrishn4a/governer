@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBusiness, upsertBusiness, Business, CatalogItem } from "@/app/lib/store";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
 function asItems(v: unknown): CatalogItem[] {
   if (!Array.isArray(v)) return [];
@@ -30,6 +31,8 @@ function buildKnowledge(name: string, items: CatalogItem[]): string {
 }
 
 export async function POST(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/business/catalog");
+
   let body: { businessId?: string; businessName?: string; items?: unknown };
   try {
     body = await req.json();

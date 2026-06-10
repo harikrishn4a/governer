@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBusiness, upsertBusiness, AgentPersona } from "@/app/lib/store";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
 function asStringArray(v: unknown): string[] | undefined {
   if (!Array.isArray(v)) return undefined;
@@ -7,6 +8,8 @@ function asStringArray(v: unknown): string[] | undefined {
 }
 
 export async function POST(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/business/persona");
+
   let body: { businessId?: string; persona?: AgentPersona };
   try {
     body = await req.json();

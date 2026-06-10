@@ -60,13 +60,14 @@ function splitMessages(messages: ChatMessage[]): {
 async function chatTextDirect(
   model: string,
   system: string | undefined,
-  messages: Array<{ role: "user" | "assistant"; content: string }>
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  maxOutputTokens: number
 ): Promise<string> {
   if (model.startsWith("claude")) {
     if (!anthropic) throw new Error("ANTHROPIC_API_KEY not set");
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: maxOutputTokens,
       system: system ?? "",
       messages,
     });
@@ -79,7 +80,7 @@ async function chatTextDirect(
     if (!openaiClient) throw new Error("OPENAI_API_KEY not set");
     const response = await openaiClient.chat.completions.create({
       model,
-      max_tokens: 4096,
+      max_tokens: maxOutputTokens,
       messages: [
         ...(system ? [{ role: "system" as const, content: system }] : []),
         ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -97,8 +98,10 @@ export async function chatText(opts: {
   model?: string;
   messages: ChatMessage[];
   temperature?: number;
+  maxOutputTokens?: number;
 }): Promise<string> {
   const model = opts.model ?? "gpt-4o-mini";
+  const maxOutputTokens = opts.maxOutputTokens ?? 4096;
   const { system, messages } = splitMessages(opts.messages);
 
   if (isGatewayEnabled()) {
@@ -107,13 +110,13 @@ export async function chatText(opts: {
       system,
       messages,
       temperature: opts.temperature,
-      maxOutputTokens: 4096,
+      maxOutputTokens,
     });
     if (!text) throw new Error("AI Gateway returned empty response");
     return text;
   }
 
-  return chatTextDirect(model, system, messages);
+  return chatTextDirect(model, system, messages, maxOutputTokens);
 }
 
 export async function chatJSON<T>(opts: {

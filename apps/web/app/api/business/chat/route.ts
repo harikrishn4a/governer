@@ -1,26 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatText } from "@/lib/llm";
 import { getBusiness, upsertBusiness, Business } from "@/app/lib/store";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
-const SYSTEM_PROMPT = `You are an AI agent that learns about a restaurant business. Your goal is to fully understand:
-- What type of cuisine they serve
-- Their specialties, unique dishes, and ingredients
-- Their values (organic, vegan, local sourcing, etc.)
-- Pricing range
-- Location and ambiance
-- What makes them unique vs competitors
+const SYSTEM_PROMPT = `You are an AI agent that learns about a business. Your goal is to fully understand:
+- What they sell and their specialties
+- Pricing range and location
+- Values and differentiators vs competitors
 
-Ask focused follow-up questions ONE AT A TIME until you're confident you deeply understand the business.
-When you feel you have comprehensive knowledge, respond with EXACTLY this prefix on its own line:
+Ask ONE focused follow-up question at a time. After 2–3 exchanges, if you have enough to pitch and negotiate on their behalf, respond with EXACTLY this prefix on its own line:
 [READY]
-followed by a summary of what you've learned. Only say [READY] when you truly have enough info to argue on behalf of this restaurant.`;
+followed by a short summary. Do not keep asking if the owner already gave solid answers.`;
+
+const MAX_HISTORY = 12;
 
 export async function POST(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/business/chat");
+
   const { businessId, businessName, message } = await req.json();
 
   let business: Business = getBusiness(businessId) || {
     id: businessId,
-    name: businessName || "Unnamed Restaurant",
+    name: businessName || "Unnamed Business",
     knowledge: "",
     isReady: false,
     conversationHistory: [],
@@ -31,8 +32,10 @@ export async function POST(req: NextRequest) {
   const reply = await chatText({
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      ...business.conversationHistory,
+      ...business.conversationHistory.slice(-MAX_HISTORY),
     ],
+    maxOutputTokens: 400,
+    temperature: 0.5,
   });
   business.conversationHistory.push({ role: "assistant", content: reply });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importCatalog, type RawItem } from "@/app/lib/import";
 import { chatJSON } from "@/lib/llm";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -48,6 +49,8 @@ async function reviewItems(items: RawItem[]): Promise<Review[]> {
 }
 
 export async function POST(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/business/import");
+
   let body: { url?: string };
   try {
     body = await req.json();

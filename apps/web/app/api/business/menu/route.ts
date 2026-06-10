@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBusiness, upsertBusiness } from "@/app/lib/store";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
 function extractVendorCode(input: string): string {
   const trimmed = input.trim();
@@ -11,6 +12,8 @@ function extractVendorCode(input: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/business/menu");
+
   const { businessId, foodpandaCode } = await req.json();
   const business = getBusiness(businessId);
   if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });

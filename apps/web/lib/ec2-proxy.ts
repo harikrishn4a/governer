@@ -15,7 +15,12 @@ export async function proxyToEc2(req: Request, path: string): Promise<NextRespon
 
   const init: RequestInit = { method: req.method, headers };
   if (req.method !== "GET" && req.method !== "HEAD") {
-    init.body = await req.text();
+    // Preserve multipart uploads (business file onboarding).
+    if (contentType?.includes("multipart/form-data")) {
+      init.body = await req.arrayBuffer();
+    } else {
+      init.body = await req.text();
+    }
   }
 
   const upstream = await fetch(url, init);

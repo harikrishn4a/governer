@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatText } from "@/lib/llm";
 import { getBusiness, upsertBusiness, Business } from "@/app/lib/store";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
 // Extract plain text from an uploaded file. Supports PDF (parsed) and
 // text-based formats (.txt/.md/.csv) read directly.
@@ -21,6 +22,8 @@ async function extractText(file: File): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/business/upload");
+
   const formData = await req.formData();
   const file = formData.get("file") as File;
   const businessId = formData.get("businessId") as string;
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
     messages: [
       {
         role: "system",
-        content: `You are an AI agent onboarding a restaurant business. You've just received a knowledge file about the business. Read it carefully and determine if you have enough information to fully represent this restaurant in negotiations.
+        content: `You are an AI agent onboarding a business. You've just received a knowledge file. Read it carefully and determine if you have enough information to fully represent this business in negotiations.
 
 You need to understand: cuisine type, specific dishes with prices, ingredients, sourcing practices, values, location, ambiance, unique differentiators, and target customers.
 
@@ -65,6 +68,7 @@ If the file is missing critical information, respond with a specific follow-up q
       },
       { role: "user", content: `Here is the knowledge file for "${businessName}":\n\n${fileContent}` },
     ],
+    maxOutputTokens: 500,
   });
   const isReady = reply.includes("[READY]");
 
