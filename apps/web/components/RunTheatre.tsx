@@ -1,8 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import type { Phase, AgentResult } from "@/lib/useAgentStream";
-import NegotiationGraph from "@/components/NegotiationGraph";
+import type { VendorInput, ArgCard } from "@/components/NegotiationForceGraph";
+
+// Three.js / WebGL — load only in the browser.
+const NegotiationForceGraph = dynamic(() => import("@/components/NegotiationForceGraph"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[560px] items-center justify-center rounded-2xl border border-border bg-[#F6F4EF] text-text-muted">
+      Loading 3D graph…
+    </div>
+  ),
+});
 
 interface Rule {
   rule: string;
@@ -52,11 +63,42 @@ export default function RunTheatre({ phase, vendors, winner, result, intent }: P
   const ranking = result?.ranking ?? [];
   const winnerName = winner ?? result?.vendor;
 
-  // Graph data: real scores once done, otherwise discovered names.
-  const graphVendors =
+  // Build the 3D graph's vendor list: real ranking (with winner) once done,
+  // otherwise the discovered vendor names.
+  const graphVendors: VendorInput[] =
     done && ranking.length > 0
-      ? ranking.map((r) => ({ name: r.vendor, score: r.score }))
-      : vendors.map((name) => ({ name }));
+      ? ranking.map((r, i) => ({
+          id: `v${i}`,
+          name: r.vendor,
+          state: r.vendor === winnerName ? "winner" : "dim",
+        }))
+      : vendors.map((name, i) => ({ id: `v${i}`, name, state: "relevant" as const }));
+
+  const winnerId = done ? graphVendors.find((v) => v.name === winnerName)?.id : undefined;
+  const activeMode: "none" | "all" | "winner" = done
+    ? "winner"
+    : phase === "deciding" || phase === "verifying"
+    ? "all"
+    : "none";
+
+  // Replay the real negotiation transcript onto the side card stacks once it arrives.
+  const [cards, setCards] = useState<ArgCard[]>([]);
+  useEffect(() => {
+    const rounds = result?.negotiation ?? [];
+    if (rounds.length === 0) {
+      setCards([]);
+      return;
+    }
+    setCards([]);
+    const turns = rounds.flatMap((r) => r.entries.map((e) => ({ speaker: e.speaker, text: e.message })));
+    const timers = turns.map((turn, i) =>
+      setTimeout(() => {
+        const side = /buyer|your agent/i.test(turn.speaker) ? "left" : "right";
+        setCards((prev) => [...prev, { id: i, side, speaker: turn.speaker, text: turn.text }]);
+      }, i * 1500)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [result]);
 
   const showGraph = done || phase === "pitching" || phase === "deciding" || phase === "verifying";
 
@@ -69,12 +111,7 @@ export default function RunTheatre({ phase, vendors, winner, result, intent }: P
           <SearchScene vendors={vendors} intent={intent} />
         </div>
       ) : showGraph ? (
-        <NegotiationGraph
-          vendors={graphVendors}
-          winner={winnerName}
-          live={!done}
-          decision={result?.decision}
-        />
+        <NegotiationForceGraph vendors={graphVendors} activeMode={activeMode} winnerId={winnerId} cards={cards} />
       ) : (
         <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
           <SearchScene vendors={vendors} intent={intent} />
