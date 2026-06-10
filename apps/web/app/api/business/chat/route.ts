@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@/app/lib/openai";
+import { chatText } from "@/lib/llm";
 import { getBusiness, upsertBusiness, Business } from "@/app/lib/store";
 
 const SYSTEM_PROMPT = `You are an AI agent that learns about a restaurant business. Your goal is to fully understand:
@@ -28,15 +28,12 @@ export async function POST(req: NextRequest) {
 
   business.conversationHistory.push({ role: "user", content: message });
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  const reply = await chatText({
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       ...business.conversationHistory,
     ],
   });
-
-  const reply = response.choices[0].message.content || "";
   business.conversationHistory.push({ role: "assistant", content: reply });
 
   if (reply.includes("[READY]")) {

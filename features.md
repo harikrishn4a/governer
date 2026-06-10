@@ -141,6 +141,35 @@ Audit log table in the governance dashboard showing all transactions with decisi
 
 ---
 
+## Feature 008: Vercel AI Gateway integration
+
+**What the user sees:**
+All agent and web LLM calls route through Vercel AI Gateway when `AI_GATEWAY_API_KEY` is set. Health endpoints on agents (`/health`) and web (`/api/health`) report `llm.route: vercel-ai-gateway` for hackathon demo verification.
+
+**Tasks:**
+- [x] `apps/agents/src/lib/llm.ts` — gateway-first AI SDK `generateText`, direct fallback
+- [x] `apps/agents/package.json` — `ai@^5`, `@ai-sdk/openai`, `@ai-sdk/anthropic`
+- [x] `apps/agents/src/index.ts` — extended `/health` with LLM route info
+- [x] `apps/agents/src/agents/supplier.ts` — `isGatewayEnabled()` model selection
+- [x] `apps/web/lib/llm.ts` — `chatText`, `chatJSON`, `llmRoute`, `gatewayStatus`
+- [x] Migrate `negotiate`, `user/search`, `business/chat`, `business/upload` routes
+- [x] Remove `apps/web/app/lib/openai.ts`
+- [x] `apps/web/app/api/health/route.ts`
+- [x] `.env.example` — `AI_GATEWAY_API_KEY` documented
+
+**Acceptance criteria:**
+- `npx tsc --noEmit` → 0 errors in agents and web
+- `npm run build` in web succeeds
+- `curl localhost:4000/health` → `llm.route: vercel-ai-gateway` when gateway key set
+- `curl localhost:3000/api/health` → same
+
+**Notes:**
+- Pin `ai@^5.0.197` — `ai@6` breaks install with Stripe toolkit peer deps
+- Use `legacy-peer-deps=true` in `.npmrc` for both packages
+- Gateway model strings use `provider/model` format (e.g. `openai/gpt-4o-mini`)
+
+---
+
 ## Feature 007: AWS infrastructure + deployment
 
 **What the user sees:**

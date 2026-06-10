@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@/app/lib/openai";
+import { chatText } from "@/lib/llm";
 import { getAllBusinesses, Business } from "@/app/lib/store";
 import { searchReviews, searchMenu, fetchFoodpandaMenu, searchSpecificItem } from "@/app/lib/exa";
 
 async function parseMenuWithAI(businessName: string, rawMenu: string): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: `You are a menu compiler. The text below contains menu data for "${businessName}" scraped from MULTIPLE websites (foodpanda, deliveroo, blogs, etc.), separated by "=====".
+  return (
+    (await chatText({
+      messages: [
+        {
+          role: "system",
+          content: `You are a menu compiler. The text below contains menu data for "${businessName}" scraped from MULTIPLE websites (foodpanda, deliveroo, blogs, etc.), separated by "=====".
 
 Your job: MERGE all sources into ONE complete, deduplicated menu. Rules:
 - Include EVERY unique menu item found across ALL sources — do not drop items
@@ -19,16 +19,15 @@ Your job: MERGE all sources into ONE complete, deduplicated menu. Rules:
 - If an item has no price, still list it but mark price as "N/A"
 - Be exhaustive — a real menu has 30-70+ items. Extract them all.
 - Only output the clean menu, no commentary. If truly no menu data exists, say "Menu data unavailable."`,
-      },
-      { role: "user", content: rawMenu.slice(0, 12000) },
-    ],
-  });
-  return response.choices[0].message.content || "Menu data unavailable.";
+        },
+        { role: "user", content: rawMenu.slice(0, 12000) },
+      ],
+    })) || "Menu data unavailable."
+  );
 }
 
 async function businessAgentPitch(business: Business, userQuery: string, competitors: string[], menuData: string): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  return chatText({
     messages: [
       {
         role: "system",
@@ -51,7 +50,6 @@ Make a DEEP, SPECIFIC pitch. Reference ACTUAL menu items and REAL prices from yo
       { role: "user", content: `Why should I choose ${business.name} for: ${userQuery}?` },
     ],
   });
-  return response.choices[0].message.content || "";
 }
 
 async function userAgentChallenge(
@@ -62,8 +60,7 @@ async function userAgentChallenge(
   const pitchSummary = pitches.map((p) => `## ${p.name}\n${p.pitch}`).join("\n\n---\n\n");
   const reviewSummary = webReviews.map((r) => `## ${r.name} (Web Reviews)\n${r.reviews}`).join("\n\n---\n\n");
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  return chatText({
     messages: [
       {
         role: "system",
@@ -80,7 +77,6 @@ Ask 2-3 hard questions to EACH restaurant. Be adversarial — you're protecting 
       { role: "user", content: `Pitches:\n${pitchSummary}\n\nReal web reviews I found:\n${reviewSummary}\n\nChallenge each restaurant.` },
     ],
   });
-  return response.choices[0].message.content || "";
 }
 
 async function businessAgentCounter(
@@ -88,8 +84,7 @@ async function businessAgentCounter(
   challenge: string,
   webReviews: string
 ): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  return chatText({
     messages: [
       {
         role: "system",
@@ -106,7 +101,6 @@ Defend your restaurant. Address each objection directly. Acknowledge valid criti
       { role: "user", content: challenge },
     ],
   });
-  return response.choices[0].message.content || "";
 }
 
 async function userAgentVerdict(
@@ -122,8 +116,7 @@ async function userAgentVerdict(
   const reviewSummary = webReviews.map((r) => `## ${r.name}\n${r.reviews}`).join("\n\n");
   const menuSummary = menus.map((m) => `## ${m.name}\n${m.menu}`).join("\n\n");
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  const raw = await chatText({
     messages: [
       {
         role: "system",
@@ -151,8 +144,6 @@ After the JSON line, write your final verdict explaining:
       { role: "user", content: `Challenges:\n${challenge}\n\nNegotiation:\n${summary}\n\nReviews:\n${reviewSummary}\n\nMenus:\n${menuSummary}\n\nScore and decide.` },
     ],
   });
-
-  const raw = response.choices[0].message.content || "";
 
   // Extract scores JSON
   let scores: { name: string; overall: number; price: number; match: number; reviews: number; negotiation: number }[] = [];

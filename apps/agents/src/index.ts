@@ -239,7 +239,20 @@ app.get("/contracts", async (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    llm: {
+      route: process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN
+        ? "vercel-ai-gateway"
+        : "direct",
+      gateway: process.env.AI_GATEWAY_API_KEY
+        ? "configured"
+        : process.env.VERCEL_OIDC_TOKEN
+        ? "oidc"
+        : "missing",
+    },
+  });
 });
 
 app.listen(PORT, () => {
@@ -248,8 +261,13 @@ app.listen(PORT, () => {
     port: PORT,
     env: {
       exa: process.env.EXA_API_KEY ? "✓" : "✗ MISSING",
-      openai: process.env.OPENAI_API_KEY ? "✓" : "✗ MISSING",
-      anthropic: process.env.ANTHROPIC_API_KEY ? "✓" : "(not set — GPT-4o active)",
+      aiGateway: process.env.AI_GATEWAY_API_KEY
+        ? "✓"
+        : process.env.VERCEL_OIDC_TOKEN
+        ? "✓ (oidc)"
+        : "✗ (direct keys)",
+      openai: process.env.OPENAI_API_KEY ? "✓" : "—",
+      anthropic: process.env.ANTHROPIC_API_KEY ? "✓" : "—",
       stripe: process.env.STRIPE_SECRET_KEY ? "✓" : "✗ MISSING",
       db: process.env.DATABASE_URL ? "✓" : "✗ MISSING",
     },

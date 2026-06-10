@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@/app/lib/openai";
+import { chatText } from "@/lib/llm";
 import { getBusiness, upsertBusiness, Business } from "@/app/lib/store";
 
 // Extract plain text from an uploaded file. Supports PDF (parsed) and
@@ -49,8 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   // AI reads the file and determines if it needs more info
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  const reply = await chatText({
     messages: [
       {
         role: "system",
@@ -67,8 +66,6 @@ If the file is missing critical information, respond with a specific follow-up q
       { role: "user", content: `Here is the knowledge file for "${businessName}":\n\n${fileContent}` },
     ],
   });
-
-  const reply = response.choices[0].message.content || "";
   const isReady = reply.includes("[READY]");
 
   let business: Business = getBusiness(businessId) || {

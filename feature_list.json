@@ -1,6 +1,6 @@
 {
   "project": "AgentBid",
-  "last_updated": "2026-06-09",
+  "last_updated": "2026-06-10",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -130,6 +130,30 @@
       "evidence": [],
       "agent_notes": "",
       "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-008",
+      "priority": 8,
+      "area": "llm",
+      "title": "Vercel AI Gateway integration",
+      "user_visible_behavior": "All agent and web LLM calls route through Vercel AI Gateway when AI_GATEWAY_API_KEY is set. Health endpoints report gateway route for demo verification.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "cd apps/agents && npx tsc --noEmit",
+        "cd apps/web && npx tsc --noEmit && npm run build",
+        "curl -s localhost:4000/health | jq .llm.route",
+        "curl -s localhost:3000/api/health | jq .llm.route"
+      ],
+      "evidence": [
+        "agents tsc → 0 errors (2026-06-10)",
+        "web tsc → 0 errors, npm run build → PASSING (2026-06-10)",
+        "curl localhost:4000/health → {\"route\":\"vercel-ai-gateway\",\"gateway\":\"configured\"}",
+        "curl localhost:3000/api/health → {\"route\":\"vercel-ai-gateway\",\"gateway\":\"configured\"}",
+        "4 web routes migrated: negotiate, user/search, business/chat, business/upload"
+      ],
+      "agent_notes": "ai@^5.0.197 pinned. legacy-peer-deps in apps/agents/.npmrc and apps/web/.npmrc. Direct OpenAI/Anthropic still works when gateway key unset.",
+      "last_updated": "2026-06-10"
     }
   ]
 }

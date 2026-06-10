@@ -30,13 +30,13 @@ agentbid/
           override/route.ts    — POST /api/override human review
           stripe-webhook/route.ts — Stripe webhook handler
       components/              — IntentInput, AgentStream, SupplierPitchCard, GovernancePanel, ContractForm, AuditLog
-      lib/                     — stream-store.ts and stripe.ts
+      lib/                     — stream-store.ts, stripe.ts, llm.ts (Vercel AI Gateway)
     agents/                    — Node.js agent workers intended for Docker to ECS Fargate
       src/
         index.ts               — Express server receiving workflow jobs
         agents/                — procurement, discovery, supplier, governance agents and shared types
         tools/                 — Exa, Stripe, and database helpers
-        lib/                   — event bus, LLM wrapper, structured logger
+        lib/                   — event bus, LLM wrapper (Vercel AI Gateway via ai@5), structured logger
       Dockerfile               — agent worker container build
       package.json             — agents package metadata and scripts
   infra/                       — AWS CDK TypeScript infrastructure

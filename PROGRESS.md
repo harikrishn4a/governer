@@ -6,10 +6,12 @@
 - Project: AgentBid, a multi-agent agentic procurement system for natural-language purchase intents
 - Target event: NEXT Hackathon @ SuperAI Singapore, 36-hour build, June 9–11 2025
 - Prize targets: Top 5 Overall + Best Use of Exa + Best Use of Stripe
-- Latest commit: 4035d8c (entry point)
+- Latest commit: governer-feature (feat-008 gateway integration)
 - Test status: `npm run test:discovery` → PASSING
 - Typecheck agents: `npx tsc --noEmit` → 0 errors
 - Typecheck web: `npx tsc --noEmit` → 0 errors
+- Web build: `npm run build` → PASSING
+- AI Gateway: `curl localhost:4000/health` + `curl localhost:3000/api/health` → `llm.route: vercel-ai-gateway`
 
 ## Completed
 
@@ -63,11 +65,22 @@
 - [ ] TEST 2: Halal contract + burger intent → BLOCK + held Stripe PI
 - [ ] Web dev server: `cd apps/web && npm run dev` → http://localhost:3000
 
+### feat-008: Vercel AI Gateway integration
+- [x] `apps/agents/src/lib/llm.ts` — gateway-first `generateText` via AI SDK v5, direct fallback
+- [x] `apps/agents/src/index.ts` — `/health` reports `llm.route` and `gateway` status
+- [x] `apps/agents/src/agents/supplier.ts` — gateway-aware model selection
+- [x] `apps/web/lib/llm.ts` — `chatText` / `chatJSON` wrappers for web API routes
+- [x] Migrated negotiate, user/search, business/chat, business/upload off direct OpenAI
+- [x] `apps/web/app/api/health/route.ts` — web health with LLM route
+- [x] `.env.example` + `apps/agents/.env.example` — `AI_GATEWAY_API_KEY` documented
+
+**Verification passed:** agents + web `tsc` 0 errors, `npm run build` OK, both health endpoints report `vercel-ai-gateway` when `AI_GATEWAY_API_KEY` set.
+
 ## Not Started
 - feat-007: AWS infrastructure + deployment (CDK stacks)
 
 ## Known Issues / Notes
-- No ANTHROPIC_API_KEY in `.env` — llm.ts auto-selects GPT-4o for all LLM calls.
+- `AI_GATEWAY_API_KEY` in `.env` — all LLM calls route through Vercel AI Gateway when set; direct OpenAI/Anthropic keys used as fallback.
 - exa-js v2.13.0 (CLAUDE.md specifies v1.4.0) — Agent API only in v2.x.
 - Stripe keys empty in `.env` — governance skips Stripe charge gracefully until keys added.
 - DATABASE_URL defaults to local postgres from docker-compose — run `docker-compose up -d postgres` before agents.

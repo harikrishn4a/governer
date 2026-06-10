@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { openai } from "@/app/lib/openai";
+import { chatJSON, chatText } from "@/lib/llm";
 import {
   Business,
   getAllBusinesses,
@@ -76,37 +76,33 @@ async function autoOnboardSupplier(
     )
     .join("\n");
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content: `You are onboarding a NEW supplier "${vendor}" that has not registered on our platform. Using the web research and the known menu items below, build a negotiation profile.
+  let location = "";
+  let knowledge = "";
+  try {
+    const parsed = await chatJSON<{ location?: string; knowledge?: string }>({
+      messages: [
+        {
+          role: "system",
+          content: `You are onboarding a NEW supplier "${vendor}" that has not registered on our platform. Using the web research and the known menu items below, build a negotiation profile.
 
 Return STRICT JSON:
 {
   "location": "best-known physical location / area (city + area). Empty string if truly unknown.",
   "knowledge": "a thorough paragraph describing the vendor: cuisine/category, signature items, price positioning, values, ambiance, and what makes them stand out — grounded ONLY in the provided info. Do not invent facts."
 }`,
-      },
-      {
-        role: "user",
-        content: `Vendor: ${vendor}\n\nKnown menu items (from partner feed):\n${seed}\n\nWeb research:\n${
-          webInfo || "(no web results found)"
-        }`,
-      },
-    ],
-  });
-
-  let location = "";
-  let knowledge = "";
-  try {
-    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+        },
+        {
+          role: "user",
+          content: `Vendor: ${vendor}\n\nKnown menu items (from partner feed):\n${seed}\n\nWeb research:\n${
+            webInfo || "(no web results found)"
+          }`,
+        },
+      ],
+    });
     location = (parsed.location || "").trim();
     knowledge = (parsed.knowledge || "").trim();
   } catch {
-    knowledge = completion.choices[0].message.content || "";
+    knowledge = "";
   }
 
   const business: Business = {
@@ -143,8 +139,7 @@ async function vendorPitch(
     )
     .join("\n");
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  return chatText({
     messages: [
       {
         role: "system",
@@ -171,7 +166,6 @@ Make a tight, specific pitch for which of YOUR listed items best matches the req
       { role: "user", content: `Pitch your best option for: ${itemDescription}` },
     ],
   });
-  return response.choices[0].message.content || "";
 }
 
 // The buyer's skeptical agent challenges every vendor after the pitches.
@@ -187,8 +181,7 @@ async function buyerChallenge(
     .map((p) => `## ${p.business.name} (web reviews)\n${p.reviews}`)
     .join("\n\n");
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  return chatText({
     messages: [
       {
         role: "system",
@@ -202,7 +195,6 @@ async function buyerChallenge(
       },
     ],
   });
-  return response.choices[0].message.content || "";
 }
 
 // Each vendor agent responds to the buyer agent's challenge.
@@ -219,8 +211,7 @@ async function vendorCounter(
     )
     .join("\n");
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  return chatText({
     messages: [
       {
         role: "system",
@@ -235,7 +226,6 @@ ${reviews}${personaToPrompt(business.persona)}`,
       { role: "user", content: challenge },
     ],
   });
-  return response.choices[0].message.content || "";
 }
 
 export async function POST(req: NextRequest) {
@@ -336,13 +326,14 @@ export async function POST(req: NextRequest) {
     options: optionsForJudge,
   };
 
-  const judge = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content: `You are the buyer's negotiation agent making the final ranking.
+  let results: NegotiatedResult[] = [];
+  let verdict = "";
+  try {
+    const parsed = await chatJSON<{ results?: NegotiatedResult[]; verdict?: string }>({
+      messages: [
+        {
+          role: "system",
+          content: `You are the buyer's negotiation agent making the final ranking.
 
 You receive: the customer's request, each vendor's pitch, the buyer agent's challenge, each vendor's response to that challenge, and a flat list of concrete options (vendor, item, price, etc.).
 
@@ -368,15 +359,10 @@ Return STRICT JSON of this exact shape:
   "verdict": "1-2 sentence summary naming the top pick and why."
 }
 Use ONLY the supplied options — never invent items. "total_cost" is the option price. Order "results" best-first.`,
-      },
-      { role: "user", content: JSON.stringify(judgeInput) },
-    ],
-  });
-
-  let results: NegotiatedResult[] = [];
-  let verdict = "";
-  try {
-    const parsed = JSON.parse(judge.choices[0].message.content || "{}");
+        },
+        { role: "user", content: JSON.stringify(judgeInput) },
+      ],
+    });
     results = Array.isArray(parsed.results) ? parsed.results : [];
     verdict = parsed.verdict || "";
   } catch {
