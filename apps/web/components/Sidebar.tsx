@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 
+export interface FlexibilityRules {
+  price: { hardCap: boolean; overspendTolerancePct: number };
+  vendor: { strictAllowlist: boolean; blockUnverified: boolean };
+  intent: { strictMatch: boolean; allowUpgrades: boolean };
+  custom: string[];
+}
+
 // Shared contract shape. Exported so app/page.tsx can reuse it.
 export interface Contract {
   id: string;
@@ -11,6 +18,7 @@ export interface Contract {
   vendor_blocklist: string[];
   vendor_allowlist: string[];
   risk_threshold: string;
+  flexibility_rules?: FlexibilityRules;
   active: boolean;
 }
 
@@ -111,6 +119,13 @@ function TagInput({
   );
 }
 
+const DEFAULT_FLEXIBILITY_RULES = {
+  price: { hardCap: false, overspendTolerancePct: 10 },
+  vendor: { strictAllowlist: false, blockUnverified: true },
+  intent: { strictMatch: false, allowUpgrades: true },
+  custom: [] as string[],
+};
+
 const BLANK_CONTRACT = {
   name: "",
   budget_cap: 100,
@@ -119,6 +134,7 @@ const BLANK_CONTRACT = {
   vendor_blocklist: [] as string[],
   vendor_allowlist: [] as string[],
   risk_threshold: "medium",
+  flexibility_rules: DEFAULT_FLEXIBILITY_RULES,
   active: true,
 };
 
@@ -133,6 +149,7 @@ function NewContractForm({
   const [form, setForm] = useState({ ...BLANK_CONTRACT });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flexibilityExpanded, setFlexibilityExpanded] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -197,17 +214,126 @@ function NewContractForm({
         </div>
       </div>
 
-      <div>
-        <label className="block text-overline uppercase text-text-muted mb-1">Risk threshold</label>
-        <select
-          value={form.risk_threshold}
-          onChange={(e) => setForm((f) => ({ ...f, risk_threshold: e.target.value }))}
-          className={inputCls}
+      <div className="border border-border rounded-lg p-2.5">
+        <button
+          type="button"
+          onClick={() => setFlexibilityExpanded(!flexibilityExpanded)}
+          className="w-full flex items-center justify-between text-caption font-semibold text-text-primary hover:text-accent-blue transition-colors"
         >
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="strict">Strict</option>
-        </select>
+          <span>Advanced rules</span>
+          <span className={`transition-transform ${flexibilityExpanded ? "rotate-180" : ""}`}>▼</span>
+        </button>
+
+        {flexibilityExpanded && (
+          <div className="mt-2 space-y-2 pt-2 border-t border-border-subtle text-caption">
+            <div className="space-y-1.5">
+              <p className="text-overline uppercase text-text-muted">Price</p>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.flexibility_rules?.price.hardCap ?? false}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    flexibility_rules: {
+                      ...f.flexibility_rules!,
+                      price: { ...f.flexibility_rules!.price, hardCap: e.target.checked }
+                    }
+                  }))}
+                  className="w-3 h-3 rounded"
+                />
+                <span className="text-caption text-text-secondary">Hard cap (never exceed)</span>
+              </label>
+              {!(form.flexibility_rules?.price.hardCap ?? false) && (
+                <div className="ml-5">
+                  <p className="text-text-secondary mb-0.5">Tolerance: {form.flexibility_rules?.price.overspendTolerancePct ?? 10}%</p>
+                  <input
+                    type="range"
+                    min="0"
+                    max="30"
+                    step="5"
+                    value={form.flexibility_rules?.price.overspendTolerancePct ?? 10}
+                    onChange={(e) => setForm((f) => ({
+                      ...f,
+                      flexibility_rules: {
+                        ...f.flexibility_rules!,
+                        price: { ...f.flexibility_rules!.price, overspendTolerancePct: parseInt(e.target.value) }
+                      }
+                    }))}
+                    className="w-full"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5 pt-1.5 border-t border-border-subtle">
+              <p className="text-overline uppercase text-text-muted">Vendor</p>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.flexibility_rules?.vendor.blockUnverified ?? true}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    flexibility_rules: {
+                      ...f.flexibility_rules!,
+                      vendor: { ...f.flexibility_rules!.vendor, blockUnverified: e.target.checked }
+                    }
+                  }))}
+                  className="w-3 h-3 rounded"
+                />
+                <span className="text-caption text-text-secondary">Block unverified</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.flexibility_rules?.vendor.strictAllowlist ?? false}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    flexibility_rules: {
+                      ...f.flexibility_rules!,
+                      vendor: { ...f.flexibility_rules!.vendor, strictAllowlist: e.target.checked }
+                    }
+                  }))}
+                  className="w-3 h-3 rounded"
+                />
+                <span className="text-caption text-text-secondary">Strict allowlist</span>
+              </label>
+            </div>
+
+            <div className="space-y-1.5 pt-1.5 border-t border-border-subtle">
+              <p className="text-overline uppercase text-text-muted">Intent</p>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.flexibility_rules?.intent.strictMatch ?? false}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    flexibility_rules: {
+                      ...f.flexibility_rules!,
+                      intent: { ...f.flexibility_rules!.intent, strictMatch: e.target.checked }
+                    }
+                  }))}
+                  className="w-3 h-3 rounded"
+                />
+                <span className="text-caption text-text-secondary">Strict match</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.flexibility_rules?.intent.allowUpgrades ?? true}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    flexibility_rules: {
+                      ...f.flexibility_rules!,
+                      intent: { ...f.flexibility_rules!.intent, allowUpgrades: e.target.checked }
+                    }
+                  }))}
+                  className="w-3 h-3 rounded"
+                />
+                <span className="text-caption text-text-secondary">Allow upgrades</span>
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
       <TagInput

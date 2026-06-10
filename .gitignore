@@ -6,3 +6,5 @@ apps/web/.env.local
 # Negotiation-agent runtime store (business onboarding state)
 apps/web/data/
 *.tsbuildinfo
+.vercel
+.env*
