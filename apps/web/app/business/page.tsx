@@ -56,6 +56,8 @@ export default function BusinessPortal() {
   const [menuSaved, setMenuSaved] = useState(false);
   const [persona, setPersona] = useState<Persona>(EMPTY_PERSONA);
   const [personaSaved, setPersonaSaved] = useState(false);
+  const [personaSaving, setPersonaSaving] = useState(false);
+  const [personaError, setPersonaError] = useState("");
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
@@ -77,12 +79,25 @@ export default function BusinessPortal() {
   }
 
   async function savePersona() {
-    const res = await fetch("/api/business/persona", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ businessId, persona }),
-    });
-    if (res.ok) setPersonaSaved(true);
+    setPersonaSaving(true);
+    setPersonaError("");
+    try {
+      const res = await fetch("/api/business/persona", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId, businessName, persona }),
+      });
+      if (res.ok) {
+        setPersonaSaved(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setPersonaError(typeof data.error === "string" ? data.error : "Could not save persona. Try again.");
+      }
+    } catch {
+      setPersonaError("Network error — could not save persona.");
+    } finally {
+      setPersonaSaving(false);
+    }
   }
 
   async function send() {
@@ -422,8 +437,15 @@ export default function BusinessPortal() {
                 />
               </div>
 
-              <button onClick={savePersona} className="rounded-lg bg-accent-blue px-5 py-2 text-[0.88rem] font-medium text-text-inverse hover:bg-accent-blue-hover">
-                {personaSaved ? "✓ Saved" : "Save agent persona"}
+              {personaError && (
+                <p className="text-[0.84rem] text-block-text">{personaError}</p>
+              )}
+              <button
+                onClick={savePersona}
+                disabled={personaSaving}
+                className="rounded-lg bg-accent-blue px-5 py-2 text-[0.88rem] font-medium text-text-inverse hover:bg-accent-blue-hover disabled:opacity-50"
+              >
+                {personaSaving ? "Saving…" : personaSaved ? "✓ Saved" : "Save agent persona"}
               </button>
             </div>
           </details>

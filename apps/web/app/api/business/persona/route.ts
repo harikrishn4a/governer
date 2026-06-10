@@ -10,21 +10,29 @@ function asStringArray(v: unknown): string[] | undefined {
 export async function POST(req: NextRequest) {
   if (shouldProxyToEc2()) return proxyToEc2(req, "/api/business/persona");
 
-  let body: { businessId?: string; persona?: AgentPersona };
+  let body: { businessId?: string; businessName?: string; persona?: AgentPersona };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { businessId, persona } = body;
+  const { businessId, businessName, persona } = body;
   if (!businessId) {
     return NextResponse.json({ error: "Missing businessId" }, { status: 400 });
   }
 
-  const business = getBusiness(businessId);
+  let business = getBusiness(businessId);
   if (!business) {
-    return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    business = {
+      id: businessId,
+      name: businessName || "Unnamed Business",
+      knowledge: "",
+      isReady: false,
+      conversationHistory: [],
+    };
+  } else if (businessName) {
+    business.name = businessName;
   }
 
   // Sanitise / whitelist the incoming persona fields.
