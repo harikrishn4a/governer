@@ -28,9 +28,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <a href="/business" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
             Business
           </a>
-          <a href="/user" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
-            Negotiate
-          </a>
         </nav>
         <main>{children}</main>
       </body>
