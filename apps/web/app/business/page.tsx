@@ -488,7 +488,7 @@ export default function BusinessPortal() {
           </button>
           <input
             className="flex-1 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[0.92rem] text-text-primary outline-none focus:border-accent-blue"
-            placeholder="Tell the AI about your restaurant…"
+            placeholder="Tell the AI about your business…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !loading && send()}
