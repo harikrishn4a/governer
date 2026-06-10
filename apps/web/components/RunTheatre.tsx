@@ -171,13 +171,8 @@ function StageStrip({ current, done }: { current: number; done: boolean }) {
 // ── Search scene ─────────────────────────────────────────────────────────────
 function SearchScene({ vendors, intent }: { vendors: string[]; intent: string }) {
   const [tick, setTick] = useState(0);
-  const [count, setCount] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), 2200);
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    const t = setInterval(() => setCount((c) => c + Math.floor(3 + Math.random() * 9)), 700);
     return () => clearInterval(t);
   }, []);
   const line = SEARCH_TICKER[tick % SEARCH_TICKER.length];
@@ -198,7 +193,7 @@ function SearchScene({ vendors, intent }: { vendors: string[]; intent: string })
             <div key={i} className="tk-shimmer h-2.5 rounded-full" style={{ width: `${72 - i * 14}%` }} />
           ))}
         </div>
-        <p className="mt-4 font-mono text-[0.76rem] text-text-muted">{count.toLocaleString()} sources analysed</p>
+        <p className="mt-4 font-mono text-[0.76rem] text-text-muted">Analysing sources…</p>
       </div>
       <p className="mt-6 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-muted">
         {vendors.length > 0 ? "Candidates found" : "Surfacing candidates…"}
