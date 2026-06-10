@@ -182,8 +182,8 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
     return () => t.forEach(clearTimeout);
   }, [runId, onStage]);
 
-  const leftCards = cards.filter((c) => c.side === "left").slice(-4);
-  const rightCards = cards.filter((c) => c.side === "right").slice(-4);
+  const leftCards = cards.filter((c) => c.side === "left").slice(-5);
+  const rightCards = cards.filter((c) => c.side === "right").slice(-5);
 
   return (
     <div ref={wrapRef} className="relative overflow-hidden rounded-2xl border border-border bg-[#F6F4EF] shadow-sm">
@@ -215,7 +215,10 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
           s.color = g.state === "pruned" ? "#A2422F" : g.state === "dim" ? "#A7A192" : "#1A1813";
           s.textHeight = g.kind === "buyer" ? 5 : 3.6;
           s.fontWeight = g.kind === "buyer" || g.state === "winner" ? "700" : "500";
-          s.position.y = g.kind === "buyer" ? 13 : 9;
+          // Sit the label just ABOVE the sphere (radius = cbrt(nodeVal) * nodeRelSize).
+          const val = g.kind === "buyer" ? 30 : g.state === "winner" ? 16 : 8;
+          const radius = Math.cbrt(val) * 6;
+          s.position.y = radius + 7;
           return s;
         }}
         linkColor={(l: object) => ((l as GLink).active ? "#CF9079" : "#DAD5C8")}
@@ -235,36 +238,37 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
   );
 }
 
+const SLOT = 96; // vertical spacing between stacked cards
+
 function CardStack({ cards, side }: { cards: ArgCard[]; side: "left" | "right" }) {
+  // Newest first, spread downward; each older card fades a step further.
+  const ordered = [...cards].reverse();
   return (
     <div
-      className={`pointer-events-none absolute top-1/2 w-[300px] -translate-y-1/2 ${side === "left" ? "left-5" : "right-5"}`}
+      className={`pointer-events-none absolute top-10 h-[480px] w-[300px] ${side === "left" ? "left-5" : "right-5"}`}
     >
-      <div className="relative h-[150px]">
-        {cards.map((c, i) => {
-          const depth = cards.length - 1 - i; // 0 = front/newest
-          const buyer = c.side === "left";
-          return (
-            <div
-              key={c.id}
-              className={`absolute left-0 right-0 rounded-xl border p-3.5 shadow-md transition-all duration-300 ${
-                buyer ? "border-accent-purple-subtle bg-[#eef0f3]" : "border-border bg-surface"
-              } ${depth === 0 ? "tk-cardin" : ""}`}
-              style={{
-                transform: `translateY(${depth * 14}px) scale(${1 - depth * 0.05})`,
-                opacity: 1 - depth * 0.26,
-                zIndex: 50 - depth,
-              }}
-            >
-              <p className={`mb-1 text-[0.66rem] font-semibold uppercase tracking-wide ${buyer ? "text-accent-purple" : "text-accent-blue"}`}>
-                {buyer ? "🛡 " : "🍽 "}
-                {c.speaker}
-              </p>
-              <p className="text-[0.82rem] leading-snug text-text-secondary">{c.text}</p>
-            </div>
-          );
-        })}
-      </div>
+      {ordered.map((c, i) => {
+        const buyer = c.side === "left";
+        return (
+          <div
+            key={c.id}
+            className={`absolute left-0 right-0 rounded-xl border p-3.5 shadow-md transition-all duration-500 ease-out ${
+              buyer ? "border-accent-purple-subtle bg-[#eef0f3]" : "border-border bg-surface"
+            } ${i === 0 ? "tk-cardin" : ""}`}
+            style={{
+              transform: `translateY(${i * SLOT}px)`,
+              opacity: Math.max(0.12, 1 - i * 0.22),
+              zIndex: 50 - i,
+            }}
+          >
+            <p className={`mb-1 text-[0.66rem] font-semibold uppercase tracking-wide ${buyer ? "text-accent-purple" : "text-accent-blue"}`}>
+              {buyer ? "🛡 " : "🍽 "}
+              {c.speaker}
+            </p>
+            <p className="line-clamp-3 text-[0.82rem] leading-snug text-text-secondary">{c.text}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
