@@ -1,11 +1,65 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { AuctionState, AgentResult, BidView } from "@/lib/useAgentStream";
+import type { VendorInput, ArgCard, NodeState } from "@/components/NegotiationForceGraph";
+
+// Three.js / WebGL — load only in the browser (same as the find-mode graph).
+const NegotiationForceGraph = dynamic(() => import("@/components/NegotiationForceGraph"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[560px] items-center justify-center rounded-2xl border border-border bg-[#F6F4EF] text-text-muted">
+      Loading 3D graph…
+    </div>
+  ),
+});
 
 interface Rule {
   rule: string;
   passed: boolean;
   detail: string;
+}
+
+// ── Adapt the auction stream into the shared 3D-graph props ───────────────────
+// Mirrors the find-mode graph (RunTheatre) but contextualised for the auction:
+// vendors/anchors become nodes, the winner lights up, and each bid / counter-bid
+// streams in as a floating argument card.
+function auctionToGraph(
+  auction: AuctionState,
+  done: boolean,
+  winnerName?: string
+): { vendors: VendorInput[]; activeMode: "none" | "all" | "winner"; winnerId?: string; cards: ArgCard[] } {
+  const skipped = new Set(auction.skipped.map((s) => s.vendor));
+  const names =
+    auction.vendors.length > 0
+      ? auction.vendors
+      : Array.from(new Set([...auction.anchors.map((a) => a.vendor), ...Object.keys(auction.bids)]));
+
+  const vendors: VendorInput[] = names.map((name, i) => {
+    let state: NodeState;
+    if (skipped.has(name)) state = "pruned";
+    else if (done) state = name === winnerName ? "winner" : "dim";
+    else state = "relevant";
+    return { id: `v${i}`, name, state };
+  });
+
+  const winnerId = done ? vendors.find((v) => v.name === winnerName)?.id : undefined;
+
+  const activeMode: "none" | "all" | "winner" = done
+    ? "winner"
+    : auction.phase === "bidding" || auction.phase === "judging"
+    ? "all"
+    : "none";
+
+  // Each bid across the rounds becomes a floating card, newest revealed last.
+  const cards: ArgCard[] = auction.bidHistory.map((b, i) => ({
+    id: i,
+    side: i % 2 === 0 ? "left" : "right",
+    speaker: b.vendor,
+    text: `SGD ${Number(b.price).toFixed(2)} — ${b.pitch}`,
+  }));
+
+  return { vendors, activeMode, winnerId, cards };
 }
 
 interface Props {
@@ -39,22 +93,46 @@ export default function AuctionTheatre({ auction, result, intent }: Props) {
   const current = stageIndex(auction.phase);
   const done = !!result;
   const rules = (result?.checkedRules as Rule[] | undefined) ?? [];
+  const winnerName = auction.winner ?? result?.vendor;
+
+  // The 3D graph is the centerpiece once vendors are in play — i.e. anytime
+  // after the tender broadcast (bidding/judging/verifying) and on completion.
+  // The tender phase still shows the live anchor-discovery scene (the auction's
+  // equivalent of find-mode's web-search scene).
+  const showGraph = done || auction.phase === "bidding" || auction.phase === "judging" || auction.phase === "verifying";
+  const graph = auctionToGraph(auction, done, winnerName);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
       <StageRail current={current} done={done} round={auction.round} />
 
-      <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
-        {done ? (
-          <AuctionRecap auction={auction} rules={rules} result={result!} />
-        ) : auction.phase === "bidding" ? (
-          <BidBoardScene auction={auction} />
-        ) : auction.phase === "judging" ? (
-          <JudgeScene auction={auction} />
-        ) : auction.phase === "verifying" ? (
-          <ReviewScene winner={auction.winner} />
+      <div className="space-y-5">
+        {showGraph ? (
+          <NegotiationForceGraph
+            vendors={graph.vendors}
+            activeMode={graph.activeMode}
+            winnerId={graph.winnerId}
+            cards={graph.cards}
+          />
         ) : (
-          <TenderScene auction={auction} intent={intent} />
+          <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+            <TenderScene auction={auction} intent={intent} />
+          </div>
+        )}
+
+        {/* Supporting detail under the graph — the rich auction-specific panels. */}
+        {(showGraph || done) && (
+          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+            {done ? (
+              <AuctionRecap auction={auction} rules={rules} result={result!} />
+            ) : auction.phase === "bidding" ? (
+              <BidBoardScene auction={auction} />
+            ) : auction.phase === "judging" ? (
+              <JudgeScene auction={auction} />
+            ) : (
+              <ReviewScene winner={auction.winner} />
+            )}
+          </div>
         )}
       </div>
     </div>
