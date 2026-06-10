@@ -54,6 +54,7 @@ async function buildPool(): Promise<Pool> {
 
   return new Pool({
     connectionString: connUrl,
+    connectionTimeoutMillis: 5_000,
     ssl: rawUrl.includes("supabase") ? { rejectUnauthorized: false } : undefined,
   });
 }

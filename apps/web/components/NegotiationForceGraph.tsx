@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import SpriteText from "three-spritetext";
+import NegotiationGraph2D from "@/components/NegotiationGraph2D";
+import { isWebGLAvailable } from "@/lib/webgl";
 
 export type NodeState = "candidate" | "relevant" | "pruned" | "winner" | "dim";
 export interface VendorInput {
@@ -52,7 +54,57 @@ interface Props {
   height?: number;
 }
 
-export default function NegotiationForceGraph({
+class GraphErrorBoundary extends Component<
+  { children: ReactNode; onError: () => void; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch() {
+    this.props.onError();
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+export default function NegotiationForceGraph(props: Props) {
+  const [webglOk, setWebglOk] = useState<boolean | null>(null);
+  const [renderFailed, setRenderFailed] = useState(false);
+
+  useEffect(() => {
+    setWebglOk(isWebGLAvailable());
+  }, []);
+
+  const fallback = <NegotiationGraph2D {...props} />;
+
+  if (webglOk === null) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-2xl border border-border bg-[#F6F4EF] text-text-muted"
+        style={{ height: props.height ?? 560 }}
+      >
+        Loading graph…
+      </div>
+    );
+  }
+
+  if (!webglOk || renderFailed) return fallback;
+
+  return (
+    <GraphErrorBoundary onError={() => setRenderFailed(true)} fallback={fallback}>
+      <ForceGraph3DInner {...props} />
+    </GraphErrorBoundary>
+  );
+}
+
+function ForceGraph3DInner({
   vendors,
   activeMode,
   winnerId,
@@ -69,7 +121,6 @@ export default function NegotiationForceGraph({
   const prevIdsRef = useRef("");
   const [graph, setGraph] = useState<{ nodes: GNode[]; links: GLink[] }>({ nodes: [], links: [] });
 
-  // responsive width
   useEffect(() => {
     if (!wrapRef.current) return;
     const ro = new ResizeObserver((entries) => setWidth(entries[0].contentRect.width));
@@ -77,7 +128,6 @@ export default function NegotiationForceGraph({
     return () => ro.disconnect();
   }, []);
 
-  // forces + auto-rotate
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
@@ -90,10 +140,8 @@ export default function NegotiationForceGraph({
     }
   }, [width, autoRotate]);
 
-  // reconcile internal graph to match props (preserving node positions by id)
   const sig = vendors.map((v) => `${v.id}:${v.state}`).join("|") + `#${activeMode}#${winnerId ?? ""}`;
   useEffect(() => {
-    // ensure buyer
     if (!nodesRef.current.find((n) => n.id === "buyer")) {
       nodesRef.current.push({ id: "buyer", name: "Buyer Agent", kind: "buyer", state: "buyer", fx: 0, fy: 0, fz: 0 });
     }
@@ -116,7 +164,6 @@ export default function NegotiationForceGraph({
     }));
     setGraph({ nodes: [...nodesRef.current], links: [...linksRef.current] });
 
-    // re-frame only when the set of nodes changes (keeps auto-rotate smooth otherwise)
     const ids = [...desired].sort().join(",");
     if (ids !== prevIdsRef.current) {
       prevIdsRef.current = ids;

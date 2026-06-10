@@ -7,7 +7,7 @@ import "./globals.css";
 // (works offline and behind SSL-intercepting proxies).
 
 export const metadata: Metadata = {
-  title: "AgentBid — AI Procurement",
+  title: "Procure — AI Procurement",
   description: "Multi-agent agentic procurement system",
 };
 
@@ -17,10 +17,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-bg font-sans text-text-primary">
         <nav className="flex items-center gap-7 border-b border-border bg-surface/80 px-7 py-3.5 backdrop-blur">
           <span className="font-serif text-[1.15rem] font-semibold tracking-tight text-text-primary">
-            Agent<span className="text-accent-blue">Bid</span>
+            Pro<span className="text-accent-blue">cure</span>
           </span>
           <a href="/" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
-            Procure
+            Search
           </a>
           <a href="/dashboard" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
             Dashboard
@@ -30,9 +30,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </a>
           <a href="/user" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
             Negotiate
-          </a>
-          <a href="/nodes" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
-            Live demo
           </a>
         </nav>
         <main>{children}</main>

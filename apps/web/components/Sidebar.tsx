@@ -458,8 +458,8 @@ export default function Sidebar({
     <aside className="flex flex-col w-72 shrink-0 self-stretch border-r border-border bg-surface">
       {/* Wordmark */}
       <div className="px-4 py-4 border-b border-border-subtle">
-        <span className="font-display text-display-md font-extrabold tracking-tight text-text-primary">
-          AgentBid
+        <span className="font-serif text-[1.15rem] font-semibold tracking-tight text-text-primary">
+          Pro<span className="text-accent-blue">cure</span>
         </span>
       </div>
 

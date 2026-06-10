@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllContracts, createContract } from "@/lib/db";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/contracts");
   try {
     const contracts = await getAllContracts();
     return NextResponse.json(contracts);
@@ -15,10 +18,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, "/api/contracts");
   try {
     const body = await req.json();
 
-    // Validate flexibilityRules structure if present
     if (body.flexibility_rules) {
       const rules = body.flexibility_rules;
       if (!rules.price || !rules.vendor || !rules.intent || !Array.isArray(rules.custom)) {

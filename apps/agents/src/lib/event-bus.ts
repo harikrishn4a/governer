@@ -1,8 +1,11 @@
 import { logger } from "./logger";
 import type { AgentEvent } from "../agents/types";
 
-// Where the web app's SSE ingest endpoint lives.
-const WEB_URL = process.env.WEB_URL ?? "http://localhost:3000";
+function ingestTargets(): string[] {
+  const urls = [process.env.WEB_URL ?? "http://localhost:3000"];
+  const extra = process.env.WEB_URL_EXTRA?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+  return [...new Set([...urls, ...extra])];
+}
 
 export type EmitFn = (e: AgentEvent) => Promise<void>;
 
@@ -16,12 +19,16 @@ export type EmitFn = (e: AgentEvent) => Promise<void>;
 export function createEmitter(txId: string): EmitFn {
   return async (event: AgentEvent) => {
     try {
-      await fetch(`${WEB_URL}/api/stream/ingest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txId, ...event }),
-        signal: AbortSignal.timeout(5000),
-      });
+      await Promise.allSettled(
+        ingestTargets().map((base) =>
+          fetch(`${base}/api/stream/ingest`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ txId, ...event }),
+            signal: AbortSignal.timeout(5000),
+          })
+        )
+      );
     } catch (err) {
       logger.warn("event-bus:ingest-failed", {
         txId,

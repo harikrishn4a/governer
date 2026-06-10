@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateContract, deleteContract } from "@/lib/db";
+import { proxyToEc2, shouldProxyToEc2 } from "@/lib/ec2-proxy";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, `/api/contracts/${params.id}`);
   try {
     const body = await req.json();
     const updated = await updateContract(params.id, body);
@@ -15,7 +18,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  if (shouldProxyToEc2()) return proxyToEc2(req, `/api/contracts/${params.id}`);
   try {
     await deleteContract(params.id);
     return NextResponse.json({ ok: true });
