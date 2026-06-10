@@ -3,4 +3,6 @@ node_modules/
 # Next.js
 apps/web/.next/
 apps/web/.env.local
+# Negotiation-agent runtime store (business onboarding state)
+apps/web/data/
 *.tsbuildinfo

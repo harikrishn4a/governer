@@ -95,7 +95,26 @@ export async function confirmHeldTransaction(
   approvedBy: string
 ): Promise<void> {
   const stripe = getStripe();
-  logger.info("stripe:override — confirming held intent", { piId: stripePaymentIntentId, approvedBy });
-  await stripe.paymentIntents.confirm(stripePaymentIntentId);
-  logger.info("stripe:override — confirmed", { piId: stripePaymentIntentId });
+  logger.info("stripe:override — releasing held intent", { piId: stripePaymentIntentId, approvedBy });
+
+  let pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+
+  // 1) Confirm if it still needs confirmation (attaches the test card & authorises).
+  if (pi.status === "requires_confirmation" || pi.status === "requires_payment_method") {
+    pi = await stripe.paymentIntents.confirm(stripePaymentIntentId, {
+      payment_method: "pm_card_visa",
+    });
+    logger.info("stripe:override — confirmed", { piId: stripePaymentIntentId, status: pi.status });
+  }
+
+  // 2) Capture the authorised hold so the payment actually goes through (manual capture).
+  if (pi.status === "requires_capture") {
+    pi = await stripe.paymentIntents.capture(stripePaymentIntentId);
+    logger.info("stripe:override — captured", { piId: stripePaymentIntentId, status: pi.status });
+  }
+
+  if (pi.status !== "succeeded") {
+    throw new Error(`PaymentIntent ${stripePaymentIntentId} ended in status "${pi.status}" (expected succeeded)`);
+  }
+  logger.info("stripe:override — payment succeeded", { piId: stripePaymentIntentId });
 }

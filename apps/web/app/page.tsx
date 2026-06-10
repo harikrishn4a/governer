@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Sidebar, { type Contract, type ProcureMode } from "@/components/Sidebar";
-import NodeGraph from "@/components/NodeGraph";
-import AgentLog from "@/components/AgentLog";
-import ResultCard, { type SupplierPitch } from "@/components/ResultCard";
+import RunTheatre from "@/components/RunTheatre";
 import { useAgentStream } from "@/lib/useAgentStream";
+
+const EXAMPLES = [
+  "A big halal burrito in the Marina Bay area under $15",
+  "Single-origin office coffee beans, 2kg, under $90",
+  "A standing desk converter under $250",
+];
 
 export default function ProcurePage() {
   const [intent, setIntent] = useState("");
@@ -20,7 +24,7 @@ export default function ProcurePage() {
   const [showBlockReview, setShowBlockReview] = useState(false);
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0);
 
-  const { graphState, logs, result, isComplete } = useAgentStream(transactionId);
+  const { graphState, result, isComplete } = useAgentStream(transactionId);
   const selectedContract = contracts.find((c) => c.id === contractId);
 
   const active = transactionId !== null;
@@ -31,9 +35,7 @@ export default function ProcurePage() {
   }, []);
 
   useEffect(() => {
-    if (isComplete && result) {
-      setBudgetRefreshKey((k) => k + 1);
-    }
+    if (isComplete && result) setBudgetRefreshKey((k) => k + 1);
   }, [isComplete, result]);
 
   async function loadContracts() {
@@ -105,10 +107,15 @@ export default function ProcurePage() {
     }
   }
 
-  const pitches = (result?.pitches ?? []) as SupplierPitch[];
+  function reset() {
+    setTransactionId(null);
+    setError(null);
+    setOverrideSuccess(false);
+    setShowBlockReview(false);
+  }
 
   return (
-    <div className="flex min-h-[calc(100vh-53px)] items-stretch">
+    <div className="flex min-h-[calc(100vh-53px)] items-stretch bg-bg">
       <Sidebar
         mode={mode}
         onModeChange={setMode}
@@ -120,155 +127,233 @@ export default function ProcurePage() {
         budgetRefreshKey={budgetRefreshKey}
       />
 
-      <main className="relative flex-1 overflow-hidden px-8 pb-20">
-        <header className="relative z-10 flex items-center justify-between py-5">
-          <span className="font-display text-display-md text-text-primary">
-            Agent<span className="text-accent-blue">Bid</span>
-          </span>
-          <a
-            href="/dashboard"
-            className="text-label text-text-muted transition-colors duration-micro hover:text-text-secondary"
-          >
-            Dashboard →
-          </a>
-        </header>
+      <main className="relative flex-1 overflow-y-auto">
+        {!active ? (
+          /* ── Idle hero ──────────────────────────────────────────────── */
+          <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center px-6 py-16">
+            <p className="text-[0.74rem] font-semibold uppercase tracking-[0.18em] text-accent-blue">
+              Agentic procurement
+            </p>
+            <h1 className="font-serif mt-3 text-[2.7rem] font-semibold leading-[1.08] tracking-tight text-text-primary sm:text-[3.1rem]">
+              Procurement, negotiated<br />by a team of AI agents.
+            </h1>
+            <p className="mt-5 max-w-xl text-[1.02rem] leading-relaxed text-text-secondary">
+              Describe what you need. Agents search the open web, run an adversarial
+              supplier negotiation, enforce your spending contract, and settle payment —
+              while you watch every step.
+            </p>
 
-        {!active && (
-          <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center" aria-hidden>
-            <div className="w-[720px] max-w-[82vw] opacity-[0.14]">
-              <NodeGraph mockMode />
+            <form onSubmit={handleSubmit} className="mt-8">
+              <div className="rounded-2xl border border-border bg-surface p-3 shadow-sm transition-colors focus-within:border-accent-blue">
+                <textarea
+                  value={intent}
+                  onChange={(e) => setIntent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  placeholder="What would you like to procure?"
+                  rows={2}
+                  className="w-full resize-none bg-transparent px-2 pt-1 text-[1.02rem] text-text-primary outline-none placeholder:text-text-muted"
+                />
+                <div className="mt-2 flex items-center justify-between gap-3 border-t border-border-subtle px-1 pt-3">
+                  <span className="text-[0.8rem] text-text-muted">
+                    {selectedContract ? (
+                      <>Contract: <span className="text-text-secondary">{selectedContract.name.trim()}</span></>
+                    ) : (
+                      "Select a contract in the sidebar"
+                    )}
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={!intent.trim() || !contractId || mode === "auction"}
+                    className="rounded-lg bg-accent-blue px-5 py-2 text-[0.9rem] font-medium text-text-inverse transition hover:bg-accent-blue-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Run agents →
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="mt-3 rounded-lg border border-block-border bg-block-subtle px-4 py-3 text-[0.88rem] text-block-text">
+                  {error}
+                </div>
+              )}
+            </form>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  onClick={() => setIntent(ex)}
+                  className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-[0.82rem] text-text-secondary transition-colors hover:border-accent-blue hover:text-text-primary"
+                >
+                  {ex}
+                </button>
+              ))}
             </div>
           </div>
-        )}
-
-        <section
-          className="relative z-10 mx-auto max-w-3xl transition-transform duration-[400ms] ease-out-expo will-change-transform"
-          style={{ transform: active ? "translateY(0)" : "translateY(30vh)" }}
-        >
-          <form onSubmit={handleSubmit}>
-            <div className="rounded-2xl border border-border bg-surface p-4 shadow-md transition-colors duration-micro focus-within:border-accent-blue">
-              <textarea
-                value={intent}
-                onChange={(e) => setIntent(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                placeholder="What would you like to procure?"
-                rows={2}
-                className="w-full resize-none bg-transparent text-body-lg text-text-primary outline-none placeholder:text-text-muted"
-              />
-
-              <div className="mt-3 flex items-center justify-end gap-3 border-t border-border-subtle pt-3">
-                <button
-                  type="submit"
-                  disabled={running || !intent.trim() || !contractId || mode === "auction"}
-                  className="flex items-center gap-2 rounded-lg bg-accent-blue px-5 py-2 text-label text-text-inverse transition hover:bg-accent-blue-hover active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {running && (
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                  )}
-                  {running ? "Running…" : "Procure"}
-                </button>
+        ) : (
+          /* ── Active run ─────────────────────────────────────────────── */
+          <div className="mx-auto max-w-5xl px-6 py-8">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                  {running ? "Agents at work" : "Run complete"}
+                </p>
+                <p className="font-serif mt-1 text-[1.35rem] font-semibold leading-snug text-text-primary">
+                  “{intent}”
+                </p>
               </div>
+              <button
+                onClick={reset}
+                className="shrink-0 rounded-lg border border-border bg-surface px-4 py-2 text-[0.85rem] font-medium text-text-secondary transition hover:border-accent-blue hover:text-text-primary"
+              >
+                New request
+              </button>
             </div>
 
+            <RunTheatre
+              phase={graphState.phase}
+              vendors={graphState.vendors}
+              winner={graphState.winner ?? result?.vendor}
+              result={result}
+              intent={intent}
+            />
+
+            {result && (
+              <VerdictBar
+                result={result}
+                overrideSuccess={overrideSuccess}
+                onRequestReview={() => setShowBlockReview(true)}
+              />
+            )}
+
             {error && (
-              <div className="mt-3 rounded-lg border border-block-border bg-block-subtle px-4 py-3 text-body text-block-text">
+              <div className="mt-4 rounded-lg border border-block-border bg-block-subtle px-4 py-3 text-[0.88rem] text-block-text">
                 {error}
               </div>
             )}
-          </form>
-
-          {!active && (
-            <p className="mt-5 text-center text-caption text-text-muted">
-              Express a purchase intent — agents discover options, run an adversarial supplier pitch, and enforce your
-              spending contract.
-            </p>
-          )}
-        </section>
-
-        {active && (
-          <section className="relative z-10 mx-auto mt-10 grid max-w-6xl grid-cols-[55fr_45fr] gap-6 lg:h-[calc(100vh-210px)] lg:min-h-[520px]">
-            <div className="animate-col-rise self-start" style={{ animationDelay: "200ms" }}>
-              <NodeGraph graphState={graphState} contractName={selectedContract?.name} />
-            </div>
-
-            <div className="animate-col-rise flex min-h-0 flex-col gap-4" style={{ animationDelay: "320ms" }}>
-              <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-border-subtle bg-surface p-4">
-                <AgentLog logs={logs} />
-              </div>
-
-              {result && (
-                <div className="scroll-custom animate-card-reveal max-h-[62%] shrink-0 overflow-y-auto">
-                  <ResultCard
-                    result={result}
-                    pitches={pitches}
-                    overrideSuccess={overrideSuccess}
-                    onRequestReview={() => setShowBlockReview(true)}
-                    budgetCap={selectedContract?.budget_cap}
-                    budgetPeriod={selectedContract?.budget_period}
-                  />
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {showBlockReview && result?.decision === "BLOCK" && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-            onClick={() => setShowBlockReview(false)}
-          >
-            <div
-              className="w-full max-w-lg rounded-2xl border border-border bg-surface-raised p-6 shadow-lg"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="font-display text-display-md text-text-primary">Blocked by governance</h3>
-              <p className="mt-1 text-body text-text-secondary">
-                {result.vendor} — {result.item} · SGD {Number(result.price).toFixed(2)}
-              </p>
-              <p className="mt-4 rounded-lg border border-block-border bg-block-subtle p-3 text-body text-block-text">
-                {result.rationale}
-              </p>
-              <p className="mt-4 mb-2 text-overline uppercase text-text-muted">Failed rules</p>
-              <ul className="mb-6 max-h-48 space-y-2 overflow-y-auto">
-                {result.checkedRules
-                  .filter((r) => !r.passed)
-                  .map((r, i) => (
-                    <li key={i} className="text-body">
-                      <span className="text-label text-block-text">{r.rule}</span>
-                      <p className="mt-0.5 text-caption text-text-muted">{r.detail}</p>
-                    </li>
-                  ))}
-              </ul>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowBlockReview(false)}
-                  className="flex-1 rounded-lg border border-border py-2 text-label text-text-secondary transition-colors duration-micro hover:bg-surface-raised"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={async () => {
-                    setShowBlockReview(false);
-                    await handleOverride();
-                  }}
-                  disabled={overrideLoading}
-                  className="flex-1 rounded-lg bg-review py-2 text-label text-text-inverse transition hover:brightness-110 disabled:opacity-50"
-                >
-                  {overrideLoading ? "Approving…" : "Override & execute"}
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </main>
+
+      {/* ── Block review / override modal ──────────────────────────────── */}
+      {showBlockReview && result?.decision === "BLOCK" && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/30 p-4 backdrop-blur-sm"
+          onClick={() => setShowBlockReview(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-serif text-[1.4rem] font-semibold text-text-primary">Blocked by governance</h3>
+            <p className="mt-1 text-[0.9rem] text-text-secondary">
+              {result.vendor} — {result.item} · SGD {Number(result.price).toFixed(2)}
+            </p>
+            <p className="mt-4 rounded-lg border border-block-border bg-block-subtle p-3 text-[0.88rem] text-block-text">
+              {result.rationale}
+            </p>
+            <p className="mb-2 mt-4 text-[0.7rem] font-semibold uppercase tracking-wide text-text-muted">
+              Failed rules
+            </p>
+            <ul className="mb-6 max-h-48 space-y-2 overflow-y-auto">
+              {result.checkedRules
+                .filter((r) => !r.passed)
+                .map((r, i) => (
+                  <li key={i} className="text-[0.86rem]">
+                    <span className="font-medium text-block-text">{r.rule}</span>
+                    <p className="mt-0.5 text-[0.8rem] text-text-muted">{r.detail}</p>
+                  </li>
+                ))}
+            </ul>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowBlockReview(false)}
+                className="flex-1 rounded-lg border border-border py-2 text-[0.88rem] font-medium text-text-secondary transition-colors hover:bg-surface-raised"
+              >
+                Close
+              </button>
+              <button
+                onClick={async () => {
+                  setShowBlockReview(false);
+                  await handleOverride();
+                }}
+                disabled={overrideLoading}
+                className="flex-1 rounded-lg bg-review py-2 text-[0.88rem] font-medium text-text-inverse transition hover:brightness-105 disabled:opacity-50"
+              >
+                {overrideLoading ? "Approving…" : "Override & execute"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Final verdict bar ────────────────────────────────────────────────────────
+function VerdictBar({
+  result,
+  overrideSuccess,
+  onRequestReview,
+}: {
+  result: import("@/lib/useAgentStream").AgentResult;
+  overrideSuccess: boolean;
+  onRequestReview: () => void;
+}) {
+  const accepted = result.decision === "ACCEPT";
+  const settled = accepted || overrideSuccess;
+
+  return (
+    <div
+      className={`mt-6 rounded-2xl border p-6 shadow-sm ${
+        settled ? "border-accept-border bg-accept-subtle" : "border-review-border bg-review-subtle"
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <span
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-text-inverse ${
+              settled ? "bg-accept" : "bg-review"
+            }`}
+          >
+            {settled ? "✓ Payment settled" : "⏸ Held for review"}
+          </span>
+          <p className="font-serif mt-3 text-[1.5rem] font-semibold leading-tight text-text-primary">
+            {result.vendor}
+          </p>
+          <p className="mt-0.5 text-[0.92rem] text-text-secondary">
+            {result.item} · <span className="font-mono">SGD {Number(result.price).toFixed(2)}</span>
+            {result.contractName && <> · {result.contractName}</>}
+          </p>
+          <p className="mt-3 max-w-2xl text-[0.9rem] leading-relaxed text-text-secondary">
+            {result.rationale}
+          </p>
+          {result.stripePaymentIntentId && (
+            <p className="mt-3 font-mono text-[0.76rem] text-text-muted">
+              Stripe · {result.stripePaymentIntentId}
+            </p>
+          )}
+        </div>
+
+        {!accepted && !overrideSuccess && (
+          <button
+            onClick={onRequestReview}
+            className="shrink-0 rounded-lg bg-review px-5 py-2.5 text-[0.88rem] font-medium text-text-inverse transition hover:brightness-105"
+          >
+            Review & override
+          </button>
+        )}
+        {overrideSuccess && (
+          <span className="shrink-0 self-center rounded-lg border border-accept-border bg-accept-subtle px-4 py-2 text-[0.85rem] font-medium text-accept-text">
+            ✓ Overridden & executed
+          </span>
+        )}
+      </div>
     </div>
   );
 }

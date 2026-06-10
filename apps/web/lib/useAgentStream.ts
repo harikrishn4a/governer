@@ -44,6 +44,9 @@ export interface AgentResult {
   contractBudgetPeriod?: string;
   pitches?: unknown[];
   options?: unknown[];
+  // Real negotiation transcript + ranked scoreboard from the negotiation API.
+  negotiation?: Array<{ round: string; entries: Array<{ speaker: string; message: string }> }>;
+  ranking?: Array<{ vendor: string; item: string; price: number; score: number; withinBudget: boolean; reasoning: string }>;
 }
 
 function isGovComplete(e: StoredEvent): boolean {

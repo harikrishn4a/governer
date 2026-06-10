@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' nodemon --exec ts-node src/index.ts",
+    "dev": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first nodemon --exec ts-node src/index.ts",
     "build": "tsc",
-    "start": "NODE_OPTIONS='--dns-result-order=ipv4first' node dist/index.js",
-    "test:discovery": "NODE_OPTIONS='--dns-result-order=ipv4first' ts-node src/test-discovery.ts",
-    "test:e2e": "NODE_OPTIONS='--dns-result-order=ipv4first' ts-node src/test-e2e.ts",
-    "test:phase5-db": "NODE_OPTIONS='--dns-result-order=ipv4first' ts-node src/test-phase5-db.ts"
+    "start": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first node dist/index.js",
+    "test:discovery": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first ts-node src/test-discovery.ts",
+    "test:e2e": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first ts-node src/test-e2e.ts",
+    "test:phase5-db": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first ts-node src/test-phase5-db.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
@@ -27,6 +27,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.0.0",
     "@types/uuid": "^10.0.0",
+    "cross-env": "^10.1.0",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.3.0"

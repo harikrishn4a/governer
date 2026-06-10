@@ -104,7 +104,7 @@ export async function exaAgentDiscover(task: string): Promise<DiscoveryOption[]>
     betas: [AGENT_BETA_HEADER],
     query: task,
     outputSchema: DISCOVERY_OUTPUT_SCHEMA,
-    effort: "high",
+    effort: "medium",
   })) as unknown as AgentRunShape;
 
   logger.info("exa:agent — run created, polling", { runId: run.id, status: run.status });

@@ -1,6 +1,11 @@
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
-import type { UserIntent, PaymentIntent, WinnerPaymentIntent } from "../agents/types";
+import type {
+  UserIntent,
+  PaymentIntent,
+  WinnerPaymentIntent,
+  NegotiationRound,
+} from "../agents/types";
 
 const NEGOTIATE_URL = "http://44.248.228.50:3000/api/negotiate";
 
@@ -21,6 +26,7 @@ interface NegotiationResult {
 interface NegotiationResponse {
   results: NegotiationResult[];
   verdict: string;
+  conversation?: NegotiationRound[];
 }
 
 function mapResult(r: NegotiationResult): PaymentIntent {
@@ -144,5 +150,15 @@ export async function callNegotiationAPI(
     score: winner.score,
     withinBudget: winner.within_budget,
     rankedAlternatives: data.results.slice(1).map(mapResult),
+    // Surface the real transcript + the full ranked scoreboard for the UI.
+    conversation: Array.isArray(data.conversation) ? data.conversation : [],
+    ranking: data.results.map((r) => ({
+      vendor: r.supplier_name,
+      item: r.item_name,
+      price: r.total_cost,
+      score: r.score,
+      withinBudget: r.within_budget,
+      reasoning: r.reasoning ?? "",
+    })),
   };
 }

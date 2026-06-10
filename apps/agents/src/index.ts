@@ -123,6 +123,9 @@ app.post("/run", async (req, res) => {
       contractBudgetPeriod: contract.budgetPeriod,
       pitches,
       options,
+      // Real negotiation transcript + ranked scoreboard for the UI.
+      negotiation: winner.conversation ?? [],
+      ranking: winner.ranking ?? [],
     });
 
     // ── Summary ───────────────────────────────────────────────────────────────
@@ -157,6 +160,9 @@ app.post("/run", async (req, res) => {
       contractBudgetPeriod: contract.budgetPeriod,
       pitches,
       options,
+      // Real negotiation transcript + ranked scoreboard for the UI.
+      negotiation: winner.conversation ?? [],
+      ranking: winner.ranking ?? [],
     });
   } catch (err) {
     const totalMs = Date.now() - requestStart;

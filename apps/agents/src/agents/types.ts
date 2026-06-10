@@ -32,11 +32,34 @@ export interface SupplierPitch {
   llmUsed: string;
 }
 
+export interface NegotiationTurn {
+  speaker: string;
+  message: string;
+}
+
+export interface NegotiationRound {
+  round: string;
+  entries: NegotiationTurn[];
+}
+
+export interface RankingEntry {
+  vendor: string;
+  item: string;
+  price: number;
+  score: number;
+  withinBudget: boolean;
+  reasoning: string;
+}
+
 export interface WinnerPaymentIntent extends PaymentIntent {
   procurementRationale: string;
   score: number;
   withinBudget: boolean;
   rankedAlternatives: PaymentIntent[];
+  // Full negotiation transcript + ranked scoreboard from the negotiation API,
+  // surfaced to the UI so the real back-and-forth can be shown.
+  conversation?: NegotiationRound[];
+  ranking?: RankingEntry[];
 }
 
 export interface SpendingContract {
