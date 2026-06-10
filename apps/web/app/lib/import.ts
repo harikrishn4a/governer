@@ -1,5 +1,5 @@
 import { fetchFoodpandaMenu } from "@/app/lib/exa";
-import { openai } from "@/app/lib/openai";
+import { chatJSON } from "@/lib/llm";
 
 export interface RawItem {
   name: string;
@@ -79,20 +79,18 @@ interface ShopifyProduct {
 
 // The foodpanda helper returns formatted markdown; turn it into structured items.
 async function parseFoodpandaItems(rawMenu: string): Promise<RawItem[]> {
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          'Extract menu items from the text into JSON of shape {"items":[{"name":string,"price":number,"description":string}]}. Prices are in SGD as numbers. Include a short description if present. Return at most 24 items, no commentary.',
-      },
-      { role: "user", content: rawMenu.slice(0, 9000) },
-    ],
-  });
   try {
-    const j = JSON.parse(res.choices[0].message.content || "{}");
+    const j = await chatJSON<{ items?: RawItem[] }>({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            'Extract menu items from the text into JSON of shape {"items":[{"name":string,"price":number,"description":string}]}. Prices are in SGD as numbers. Include a short description if present. Return at most 24 items, no commentary.',
+        },
+        { role: "user", content: rawMenu.slice(0, 9000) },
+      ],
+    });
     return Array.isArray(j.items) ? (j.items as RawItem[]).slice(0, MAX_ITEMS) : [];
   } catch {
     return [];

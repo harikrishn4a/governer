@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importCatalog, type RawItem } from "@/app/lib/import";
-import { openai } from "@/app/lib/openai";
+import { chatJSON } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,9 +15,8 @@ interface Review {
 async function reviewItems(items: RawItem[]): Promise<Review[]> {
   if (items.length === 0) return [];
   try {
-    const res = await openai.chat.completions.create({
+    const parsed = await chatJSON<{ reviews?: Review[] }>({
       model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
@@ -33,7 +32,6 @@ async function reviewItems(items: RawItem[]): Promise<Review[]> {
         },
       ],
     });
-    const parsed = JSON.parse(res.choices[0].message.content || "{}");
     const reviews: Review[] = Array.isArray(parsed.reviews) ? parsed.reviews : [];
     // align to items length
     return items.map((_, i) => ({
