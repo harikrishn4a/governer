@@ -369,7 +369,7 @@ export default function BusinessPortal() {
         )}
 
         {/* persona */}
-        {isReady && (
+        {(
           <details className="mt-4 rounded-xl border border-border bg-surface shadow-sm">
             <summary className="cursor-pointer select-none px-5 py-3.5 text-[0.95rem] font-medium text-text-primary">
               🎭 Customise your AI salesman {personaSaved && <span className="ml-1 text-[0.8rem] text-accept-text">✓ saved</span>}
