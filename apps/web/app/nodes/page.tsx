@@ -1,47 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import NegotiationGraph from "@/components/NegotiationGraph";
+import { useCallback, useState } from "react";
+import dynamic from "next/dynamic";
+import type { Stage } from "@/components/NegotiationForceGraph";
 
-type Stage = "reveal" | "negotiate" | "verdict";
-
-const ALL = [
-  { name: "Mad Mex", score: 84 },
-  { name: "Guzman y Gomez", score: 80 },
-  { name: "Baja Fresh", score: 78 },
-  { name: "Chimi's - Marina Bay", score: 70 },
-  { name: "Super Loco", score: 65 },
-];
+// Three.js / WebGL — load only in the browser.
+const NegotiationForceGraph = dynamic(() => import("@/components/NegotiationForceGraph"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[540px] items-center justify-center rounded-2xl border border-border bg-[#F6F4EF] text-text-muted">
+      Loading 3D graph…
+    </div>
+  ),
+});
 
 const STAGE_COPY: Record<Stage, string> = {
-  reveal: "Agents discovered — assembling the negotiation table.",
-  negotiate: "Live negotiation: vendors pitch, the buyer agent challenges, vendors defend.",
-  verdict: "Verdict reached — the buyer agent crowns the winner.",
+  discovery: "Exa is surfacing candidate suppliers from across the live web…",
+  pruning: "Filtering out vendors that don't match the request…",
+  negotiate: "Negotiation underway — each vendor drives its case into your buyer agent.",
+  verdict: "Verdict reached — the buyer agent commits to the winning vendor.",
 };
 
 export default function NodesDemo() {
-  const [revealed, setRevealed] = useState(0);
-  const [stage, setStage] = useState<Stage>("reveal");
-  const [runId, setRunId] = useState(0);
-
-  useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    setRevealed(0);
-    setStage("reveal");
-
-    ALL.forEach((_, i) => timers.push(setTimeout(() => setRevealed(i + 1), 360 * (i + 1))));
-    const revealDone = 360 * ALL.length + 400;
-    timers.push(setTimeout(() => setStage("negotiate"), revealDone));
-    timers.push(setTimeout(() => setStage("verdict"), revealDone + 9200));
-    timers.push(setTimeout(() => setRunId((r) => r + 1), revealDone + 9200 + 6000)); // loop
-
-    return () => timers.forEach(clearTimeout);
-  }, [runId]);
-
-  const isVerdict = stage === "verdict";
-  const vendors = isVerdict
-    ? ALL
-    : ALL.slice(0, revealed).map((v) => ({ name: v.name }));
+  const [stage, setStage] = useState<Stage>("discovery");
+  const onStage = useCallback((s: Stage) => setStage(s), []);
 
   return (
     <div className="min-h-[calc(100vh-53px)] bg-bg px-6 py-12">
@@ -49,44 +31,34 @@ export default function NodesDemo() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[0.74rem] font-semibold uppercase tracking-[0.18em] text-accent-blue">
-              Animation preview
+              Animation preview · 3D
             </p>
             <h1 className="font-serif mt-2 text-[2.2rem] font-semibold leading-tight tracking-tight text-text-primary">
-              The negotiation, visualised.
+              The negotiation, in three dimensions.
             </h1>
-            <p className="mt-2 max-w-xl text-[0.96rem] leading-relaxed text-text-secondary">
-              A standalone, looping preview of the live agent negotiation graph — no
-              backend run required. {STAGE_COPY[stage]}
+            <p className="mt-2 max-w-2xl text-[0.96rem] leading-relaxed text-text-secondary">
+              A live, looping 3D force graph — suppliers spawn as Exa discovers them, irrelevant
+              ones are pruned away, and during negotiation information streams into the central
+              buyer agent. Drag to orbit; scroll to zoom.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {(["reveal", "negotiate", "verdict"] as Stage[]).map((s) => (
+            {(["discovery", "pruning", "negotiate", "verdict"] as Stage[]).map((s) => (
               <span
                 key={s}
-                className={`rounded-full px-3 py-1 text-[0.74rem] font-medium ${
+                className={`rounded-full px-3 py-1 text-[0.72rem] font-medium transition-colors ${
                   stage === s ? "bg-accent-blue text-text-inverse" : "border border-border text-text-muted"
                 }`}
               >
                 {s}
               </span>
             ))}
-            <button
-              onClick={() => setRunId((r) => r + 1)}
-              className="rounded-lg border border-border bg-surface px-4 py-1.5 text-[0.82rem] font-medium text-text-secondary transition hover:border-accent-blue hover:text-text-primary"
-            >
-              ↻ Replay
-            </button>
           </div>
         </div>
 
-        <div className="mt-6">
-          <NegotiationGraph
-            vendors={vendors}
-            winner={isVerdict ? "Mad Mex" : undefined}
-            live={!isVerdict}
-            decision={isVerdict ? "ACCEPT" : undefined}
-          />
-        </div>
+        <p className="mt-5 mb-3 text-[0.9rem] font-medium text-text-secondary">{STAGE_COPY[stage]}</p>
+
+        <NegotiationForceGraph onStage={onStage} />
       </div>
     </div>
   );
