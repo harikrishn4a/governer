@@ -23,7 +23,7 @@ export async function proxyToEc2(req: Request, path: string): Promise<NextRespon
     }
   }
 
-  const upstream = await fetch(url, init);
+  const upstream = await fetch(url, { ...init, cache: "no-store" });
   const body = await upstream.text();
   return new NextResponse(body, {
     status: upstream.status,

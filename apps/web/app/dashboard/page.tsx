@@ -191,30 +191,44 @@ export default function DashboardPage() {
   useEffect(() => { loadAll(); }, []);
 
   useEffect(() => {
-    if (selectedContractId) loadBudget(selectedContractId);
-  }, [selectedContractId, transactions, contracts]);
+    if (selectedContractId) {
+      loadBudget(selectedContractId);
+      loadTransactions(selectedContractId);
+    }
+  }, [selectedContractId, contracts]);
 
   function selectContract(id: string) {
     setSelectedContractId(id);
-    loadBudget(id);
+  }
+
+  async function loadTransactions(contractId: string) {
+    try {
+      const res = await fetch(
+        `/api/transactions?contractId=${encodeURIComponent(contractId)}&t=${Date.now()}`,
+        { cache: "no-store" }
+      );
+      if (res.ok) setTransactions(await res.json());
+    } catch {}
   }
 
   async function loadAll() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [cr, tr] = await Promise.all([
-        fetch("/api/contracts", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(`contracts ${r.status}`); return r.json(); }),
-        fetch("/api/transactions", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(`transactions ${r.status}`); return r.json(); }),
-      ]);
+      const cr = await fetch(`/api/contracts?t=${Date.now()}`, { cache: "no-store" })
+        .then(r => { if (!r.ok) throw new Error(`contracts ${r.status}`); return r.json(); });
       const contractList = (Array.isArray(cr) ? cr : []).filter((c: Contract) => c.active);
       setContracts(contractList);
-      setTransactions(Array.isArray(tr) ? tr : []);
-      setSelectedContractId((prev) => {
-        if (prev && contractList.some((c: Contract) => c.id === prev)) return prev;
+      const nextId = (() => {
+        if (selectedContractId && contractList.some((c: Contract) => c.id === selectedContractId)) {
+          return selectedContractId;
+        }
         const food = contractList.find((c: Contract) => c.name.toLowerCase().includes("food"));
         return food?.id ?? contractList[0]?.id ?? "";
-      });
+      })();
+      setSelectedContractId(nextId);
+      if (nextId) await loadTransactions(nextId);
+      else setTransactions([]);
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : String(err));
     }
@@ -327,8 +341,6 @@ export default function DashboardPage() {
   const selectedContract = contracts.find(c => c.id === selectedContractId);
 
   const filteredTx = transactions.filter(t => {
-    if (!selectedContractId) return false;
-    if (String(t.contract_id) !== String(selectedContractId)) return false;
     if (filterDecision === "ALL") return true;
     if (filterDecision === "ACCEPT") {
       return t.governance_decision === "ACCEPT" || !!t.overridden_by;

@@ -123,8 +123,15 @@ export async function updateContract(id: string, data: Record<string, unknown>) 
   return rows[0];
 }
 
-export async function getAllTransactions() {
+export async function getAllTransactions(contractId?: string) {
   const pool = await getPool();
+  if (contractId) {
+    const { rows } = await pool.query(
+      "SELECT * FROM transactions WHERE contract_id = $1 ORDER BY created_at DESC LIMIT 100",
+      [contractId]
+    );
+    return rows;
+  }
   const { rows } = await pool.query(
     "SELECT * FROM transactions ORDER BY created_at DESC LIMIT 100"
   );
