@@ -109,6 +109,7 @@ export default function DashboardPage() {
   const [selectedContractId, setSelectedContractId] = useState<string>("");
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [reviewTx, setReviewTx] = useState<Transaction | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => { loadAll(); }, []);
 
@@ -180,6 +181,18 @@ export default function DashboardPage() {
       body: JSON.stringify({ active: false }),
     });
     await loadAll();
+  }
+
+  async function deleteContractHandler(id: string) {
+    try {
+      await fetch(`/api/contracts/${id}`, { method: "DELETE" });
+      if (selectedContractId === id) {
+        setSelectedContractId("");
+        setBudget(null);
+      }
+      await loadAll();
+    } catch {}
+    setDeleteConfirm(null);
   }
 
   function editContract(c: Contract) {
@@ -389,6 +402,7 @@ export default function DashboardPage() {
                   {c.active && (
                     <button onClick={() => deactivateContract(c.id)} className="text-caption text-block-text hover:underline">Deactivate</button>
                   )}
+                  <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(c.id); }} className="text-caption text-block-text hover:underline">Delete</button>
                 </div>
               </div>
             ))}
@@ -519,6 +533,28 @@ export default function DashboardPage() {
                 className="flex-1 bg-review text-text-inverse py-2 rounded-lg text-label font-medium hover:brightness-110 transition-[filter] duration-micro"
               >
                 {overrideLoading === reviewTx.id ? "Approving…" : "Override & execute"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setDeleteConfirm(null)}>
+          <div className="bg-surface-raised border border-border rounded-2xl max-w-lg w-full p-6 shadow-lg" onClick={e => e.stopPropagation()}>
+            <h3 className="font-display text-display-md text-text-primary mb-1">Delete contract?</h3>
+            <p className="text-body text-text-secondary mb-4">
+              This will permanently delete the contract "{contracts.find(c => c.id === deleteConfirm)?.name}". This action cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 border border-border text-text-secondary py-2 rounded-lg text-label hover:bg-surface">
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteContractHandler(deleteConfirm)}
+                className="flex-1 bg-block text-text-inverse py-2 rounded-lg text-label font-medium hover:brightness-110 transition-[filter] duration-micro"
+              >
+                Delete
               </button>
             </div>
           </div>

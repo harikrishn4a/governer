@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateContract } from "@/lib/db";
+import { updateContract, deleteContract } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await updateContract(params.id, { active: false });
+    await deleteContract(params.id);
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -105,6 +105,15 @@ export async function getTransaction(id: string) {
   return rows[0] ?? null;
 }
 
+export async function deleteContract(id: string) {
+  const pool = await getPool();
+  const { rows } = await pool.query(
+    "DELETE FROM spending_contracts WHERE id = $1 RETURNING *",
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
 export async function getContractSpend(contractId: string, period: string): Promise<number> {
   const pool = await getPool();
   let since: string;
