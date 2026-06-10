@@ -1,6 +1,6 @@
 {
   "project": "AgentBid",
-  "last_updated": "2026-06-09",
+  "last_updated": "2026-06-10",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -17,7 +17,7 @@
       "id": "feat-001",
       "priority": 1,
       "area": "agents",
-      "title": "Discovery pipeline — UserIntent → PaymentIntent[]",
+      "title": "Discovery pipeline \u2014 UserIntent \u2192 PaymentIntent[]",
       "user_visible_behavior": "Raw purchase intent in, structured PaymentIntent[] out. Foundation for all downstream agent stages.",
       "status": "passing",
       "blocked_reason": "",
@@ -25,20 +25,20 @@
         "cd apps/agents && npm run test:discovery"
       ],
       "evidence": [
-        "npm run test:discovery → VALIDATION PASSED — 5 options returned, all required fields present",
+        "npm run test:discovery \u2192 VALIDATION PASSED \u2014 5 options returned, all required fields present",
         "Exa Agent mode: attempt 1, stopReason: schema_satisfied, cost: $0.50",
         "Augmented query contains no platform names",
         "Fallback path (searchAndContents + GPT-4o) also verified passing on timeout runs",
-        "npx tsc --noEmit → 0 errors"
+        "npx tsc --noEmit \u2192 0 errors"
       ],
-      "agent_notes": "exa-js v2.13.0 used (Agent API at exa.beta.agent.runs). No ANTHROPIC_API_KEY in env — llm.ts auto-falls back to GPT-4o. Poll timeout is 300s; Exa Agent typically completes in 2–3 min. Timeout errors are non-transient (not retried). JSON parse and 5xx errors trigger up to 3 retries with 2s delay.",
+      "agent_notes": "exa-js v2.13.0 used (Agent API at exa.beta.agent.runs). No ANTHROPIC_API_KEY in env \u2014 llm.ts auto-falls back to GPT-4o. Poll timeout is 300s; Exa Agent typically completes in 2\u20133 min. Timeout errors are non-transient (not retried). JSON parse and 5xx errors trigger up to 3 retries with 2s delay.",
       "last_updated": "2026-06-09"
     },
     {
       "id": "feat-002",
       "priority": 2,
       "area": "agents",
-      "title": "Supplier pitch agents — parallel fan-out",
+      "title": "Supplier pitch agents \u2014 parallel fan-out",
       "user_visible_behavior": "Three supplier agents (GPT-4o, Claude, Gemini Flash) each advocate for one discovery option. Pitch cards shown in UI with vendor name, price, LLM badge, key points, and fit score bar.",
       "status": "not_started",
       "blocked_reason": "",
@@ -53,7 +53,7 @@
       "id": "feat-003",
       "priority": 3,
       "area": "agents",
-      "title": "Procurement orchestration — pick_winner",
+      "title": "Procurement orchestration \u2014 pick_winner",
       "user_visible_behavior": "After supplier pitches, procurement agent selects the winning option with a rationale. Winning pitch card highlighted in UI.",
       "status": "not_started",
       "blocked_reason": "",
@@ -90,7 +90,7 @@
       "status": "not_started",
       "blocked_reason": "",
       "verification": [
-        "cd apps/web && npm run dev — app loads at localhost:3000",
+        "cd apps/web && npm run dev \u2014 app loads at localhost:3000",
         "Submit an intent and verify agent events stream live in AgentStream component",
         "Verify SupplierPitchCard, GovernancePanel, ContractForm, AuditLog all render"
       ],
@@ -123,13 +123,35 @@
       "status": "not_started",
       "blocked_reason": "",
       "verification": [
-        "cdk deploy --all — all stacks deploy without error",
-        "curl https://<ECS_ALB>/health → {status: ok}",
-        "vercel --prod → web app live at Vercel URL"
+        "cdk deploy --all \u2014 all stacks deploy without error",
+        "curl https://<ECS_ALB>/health \u2192 {status: ok}",
+        "vercel --prod \u2192 web app live at Vercel URL"
       ],
       "evidence": [],
       "agent_notes": "",
       "last_updated": "2026-06-09"
+    },
+    {
+      "id": "feat-008",
+      "priority": 8,
+      "area": "web",
+      "title": "Design audit remediation \u2014 UI consistency pass",
+      "user_visible_behavior": "One brand wordmark per page (no triple branding), client-side navigation, single contract form behaving identically on both pages, accessible modals (Escape/focus trap), example intent chips on the hero, explained disabled CTA, humanized labels (no raw enums), skeleton dashboard loading, confirm-before-deactivate.",
+      "status": "completed",
+      "blocked_reason": "",
+      "verification": [
+        "cd apps/web && npx tsc --noEmit -> 0 errors",
+        "cd apps/web && npx next build -> / and /dashboard compile",
+        "Manual: / shows one wordmark (sidebar); /dashboard shows one wordmark (header)",
+        "Manual: contract create from sidebar and dashboard use the same form fields/defaults",
+        "Manual: block-review modals close on Escape, focus returns to trigger"
+      ],
+      "evidence": [
+        "next build route table: / 9.74kB, /dashboard 5.61kB",
+        "new files: components/Wordmark.tsx, components/Dialog.tsx, components/ContractForm.tsx, lib/labels.ts"
+      ],
+      "agent_notes": "Deferred: mobile sidebar strategy (desktop-only per DESIGN-SYSTEM.md), NodeGraph 9px vendor labels, result-card takeover of log column on completion.",
+      "last_updated": "2026-06-10"
     }
   ]
 }

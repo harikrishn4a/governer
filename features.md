@@ -158,3 +158,24 @@ Production app running on Vercel (web) + ECS Fargate (agents). CloudWatch dashbo
 - [ ] Vercel deploy web app
 
 **Notes:**
+
+---
+
+## Feature 008: Design audit remediation — UI consistency pass
+
+**What the user sees:**
+One brand wordmark per page with a single treatment (no more triple branding on `/`), instant client-side navigation, an identical contract form on both pages, modals that close with Escape and keep keyboard focus, example intent chips under the hero, a disabled Procure button that explains itself, human-readable labels everywhere ("per transaction", "Accepted"), a skeleton-loading dashboard, and a confirmation before deactivating a contract.
+
+**Tasks:**
+- [x] `apps/web/components/Wordmark.tsx` — single sanctioned brand treatment
+- [x] `apps/web/app/layout.tsx` — global top nav removed
+- [x] `apps/web/components/ContractForm.tsx` — single-source create/edit form + TagInput
+- [x] `apps/web/components/Dialog.tsx` — accessible modal primitive (Escape, focus trap/restore)
+- [x] `apps/web/lib/labels.ts` — humanized enum vocabulary shared by both pages
+- [x] `apps/web/app/page.tsx` — intent chips, disabled-CTA hint, Next Link, responsive grid, Dialog
+- [x] `apps/web/app/dashboard/page.tsx` — rewrite: header, skeleton, stat hierarchy, a11y cards, confirm deactivate, empty-state CTAs, Dialog
+- [x] `apps/web/components/AgentLog.tsx` — stick-to-bottom auto-scroll
+- [x] `apps/web/components/ResultCard.tsx` — no emojis, amber over-budget pill, opacity hovers
+
+**Notes:**
+Verified: `tsc --noEmit` 0 errors, `next build` clean. Deferred: mobile sidebar strategy (desktop-only per DESIGN-SYSTEM.md), NodeGraph 9px labels, result-card takeover of the log column.

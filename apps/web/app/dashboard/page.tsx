@@ -1,5 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import Wordmark from "@/components/Wordmark";
+import Dialog from "@/components/Dialog";
+import ContractForm, { type ContractFormValues } from "@/components/ContractForm";
+import { periodLabel, decisionLabel } from "@/lib/labels";
 
 interface Contract {
   id: string;
@@ -44,50 +49,43 @@ interface BudgetSummary {
   percentUsed: number;
 }
 
-const BLANK_CONTRACT = {
-  name: "",
-  budget_cap: 100,
-  budget_period: "per_transaction",
-  category_constraints: [] as string[],
-  vendor_blocklist: [] as string[],
-  vendor_allowlist: [] as string[],
-  risk_threshold: "medium",
-  active: true,
-};
+function toFormValues(c: Contract): ContractFormValues {
+  return {
+    name: c.name,
+    budget_cap: c.budget_cap,
+    budget_period: c.budget_period,
+    category_constraints: c.category_constraints || [],
+    vendor_blocklist: c.vendor_blocklist || [],
+    vendor_allowlist: c.vendor_allowlist || [],
+    risk_threshold: c.risk_threshold,
+    active: c.active,
+  };
+}
 
-function TagInput({ label, values, onChange }: {
-  label: string;
-  values: string[];
-  onChange: (v: string[]) => void;
-}) {
-  const [input, setInput] = useState("");
-  function addTag() {
-    const trimmed = input.trim();
-    if (trimmed && !values.includes(trimmed)) {
-      onChange([...values, trimmed]);
-    }
-    setInput("");
-  }
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/* Skeleton mirrors the loaded layout (budget card + two columns) so the page
+ * doesn't jump when data lands. Pulse only — no spinner chrome. */
+function DashboardSkeleton() {
   return (
-    <div>
-      <label className="block text-overline uppercase text-text-muted mb-1">{label}</label>
-      <div className="flex flex-wrap gap-1 mb-1">
-        {values.map(v => (
-          <span key={v} className="bg-surface-raised text-text-secondary text-caption px-2 py-0.5 rounded-full flex items-center gap-1">
-            {v}
-            <button onClick={() => onChange(values.filter(x => x !== v))} className="text-text-muted hover:text-block-text">×</button>
-          </span>
-        ))}
-      </div>
-      <div className="flex gap-1">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
-          placeholder="Type and press Enter"
-          className="flex-1 bg-surface-raised border border-border rounded px-2 py-1 text-caption text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent-blue"
-        />
-        <button onClick={addTag} className="text-caption bg-surface-raised border border-border text-text-secondary hover:text-text-primary px-2 py-1 rounded">Add</button>
+    <div className="animate-pulse space-y-8" aria-hidden>
+      <div className="h-44 rounded-2xl bg-surface" />
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-2 space-y-2">
+          <div className="h-6 w-44 rounded bg-surface" />
+          <div className="h-20 rounded-xl bg-surface" />
+          <div className="h-20 rounded-xl bg-surface" />
+        </div>
+        <div className="lg:col-span-3 space-y-2">
+          <div className="h-6 w-40 rounded bg-surface" />
+          <div className="h-16 rounded-xl bg-surface" />
+          <div className="h-16 rounded-xl bg-surface" />
+          <div className="h-16 rounded-xl bg-surface" />
+        </div>
       </div>
     </div>
   );
@@ -98,13 +96,10 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ ...BLANK_CONTRACT });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<Contract | null>(null);
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
   const [filterDecision, setFilterDecision] = useState<string>("ALL");
   const [overrideLoading, setOverrideLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedContractId, setSelectedContractId] = useState<string>("");
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
@@ -144,37 +139,9 @@ export default function DashboardPage() {
     } catch {}
   }
 
-  async function saveContract() {
-    setSaving(true);
-    setError(null);
-    try {
-      if (editingId) {
-        const r = await fetch(`/api/contracts/${editingId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        });
-        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error ?? `Save failed (${r.status})`); }
-      } else {
-        const r = await fetch("/api/contracts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        });
-        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error ?? `Save failed (${r.status})`); }
-      }
-      setShowForm(false);
-      setEditingId(null);
-      setFormData({ ...BLANK_CONTRACT });
-      await loadAll();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-    setSaving(false);
-  }
-
-  async function deactivateContract(id: string) {
-    await fetch(`/api/contracts/${id}`, {
+  async function deactivateContract(c: Contract) {
+    if (!window.confirm(`Deactivate "${c.name.trim()}"? It will stop accepting new procurements.`)) return;
+    await fetch(`/api/contracts/${c.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: false }),
@@ -183,18 +150,7 @@ export default function DashboardPage() {
   }
 
   function editContract(c: Contract) {
-    setError(null);
-    setFormData({
-      name: c.name,
-      budget_cap: c.budget_cap,
-      budget_period: c.budget_period,
-      category_constraints: c.category_constraints || [],
-      vendor_blocklist: c.vendor_blocklist || [],
-      vendor_allowlist: c.vendor_allowlist || [],
-      risk_threshold: c.risk_threshold,
-      active: c.active,
-    });
-    setEditingId(c.id);
+    setEditing(c);
     setShowForm(true);
   }
 
@@ -223,14 +179,19 @@ export default function DashboardPage() {
     return rules.filter(r => !r.passed);
   }
 
-  const inputCls = "w-full bg-surface-raised border border-border rounded px-2 py-1 text-label text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent-blue";
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-64 text-text-muted">Loading…</div>
-  );
-
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
+    <div className="max-w-6xl mx-auto px-8 py-8">
+      {/* One wordmark, one route out — mirrors the procure page header. */}
+      <header className="flex items-center justify-between mb-10">
+        <Wordmark />
+        <Link
+          href="/"
+          className="text-label text-text-muted transition-colors duration-micro hover:text-text-secondary"
+        >
+          New procurement →
+        </Link>
+      </header>
+
       <h1 className="font-display text-display-xl text-text-primary mb-8">Governance Dashboard</h1>
 
       {loadError && (
@@ -240,14 +201,17 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {loading ? <DashboardSkeleton /> : (
+      <>
       {budget && selectedContract && (
         <div className="mb-8 bg-surface border border-border rounded-2xl p-6 shadow-md">
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between mb-5">
             <div>
               <p className="text-overline uppercase text-text-muted">Budget</p>
-              <h2 className="font-display text-display-lg text-text-primary mt-1">{selectedContract.name.trim()}</h2>
-              <p className="text-body text-text-secondary mt-1 font-mono">
-                SGD {budget.budgetCap.toFixed(2)} / {budget.budgetPeriod}
+              {/* The numbers are the point of this card — the contract name labels them. */}
+              <p className="text-label font-semibold text-text-primary mt-1">{selectedContract.name.trim()}</p>
+              <p className="text-caption text-text-secondary mt-0.5 font-mono">
+                SGD {budget.budgetCap.toFixed(2)} / {periodLabel(budget.budgetPeriod)}
               </p>
             </div>
             <select
@@ -260,24 +224,24 @@ export default function DashboardPage() {
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div className="bg-surface-raised rounded-xl p-4">
               <p className="text-overline uppercase text-text-muted">Spent</p>
-              <p className="font-display text-display-md text-text-primary tabular-nums">SGD {budget.spent.toFixed(2)}</p>
+              <p className="font-display text-display-lg text-text-primary tabular-nums">SGD {budget.spent.toFixed(2)}</p>
             </div>
             <div className="bg-surface-raised rounded-xl p-4">
               <p className="text-overline uppercase text-text-muted">Remaining</p>
-              <p className="font-display text-display-md text-accept-text tabular-nums">SGD {budget.remaining.toFixed(2)}</p>
+              <p className="font-display text-display-lg text-accept-text tabular-nums">SGD {budget.remaining.toFixed(2)}</p>
             </div>
             <div className="bg-surface-raised rounded-xl p-4">
               <p className="text-overline uppercase text-text-muted">Used</p>
-              <p className="font-display text-display-md text-text-primary tabular-nums">{budget.percentUsed.toFixed(0)}%</p>
+              <p className="font-display text-display-lg text-text-primary tabular-nums">{budget.percentUsed.toFixed(0)}%</p>
             </div>
           </div>
           <div className="h-3 bg-surface-raised rounded-full overflow-hidden">
             <div
               className={`h-3 rounded-full transition-all duration-standard ease-smooth ${budget.percentUsed > 90 ? "bg-block" : budget.percentUsed > 70 ? "bg-review" : "bg-accept"}`}
-              style={{ width: `${budget.percentUsed}%` }}
+              style={{ width: `${Math.min(100, budget.percentUsed)}%` }}
             />
           </div>
           {selectedContract.category_constraints?.length > 0 && (
@@ -295,7 +259,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-display text-display-md text-text-primary">Spending Contracts</h2>
             <button
-              onClick={() => { setShowForm(true); setEditingId(null); setFormData({ ...BLANK_CONTRACT }); setError(null); }}
+              onClick={() => { setShowForm(true); setEditing(null); }}
               className="text-label bg-accent-blue text-text-inverse px-3 py-1.5 rounded-lg hover:bg-accent-blue-hover transition-colors duration-micro"
             >
               + New
@@ -303,73 +267,33 @@ export default function DashboardPage() {
           </div>
 
           {showForm && (
-            <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
-              <p className="text-label font-semibold text-text-primary">{editingId ? "Edit contract" : "New contract"}</p>
-              {error && <p className="text-caption text-block-text">{error}</p>}
-
-              <div>
-                <label className="block text-overline uppercase text-text-muted mb-1">Name</label>
-                <input value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-                  className={inputCls} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-overline uppercase text-text-muted mb-1">Budget cap (SGD)</label>
-                  <input type="number" value={formData.budget_cap}
-                    onChange={e => setFormData(f => ({ ...f, budget_cap: parseFloat(e.target.value) }))}
-                    className={`${inputCls} font-mono`} />
-                </div>
-                <div>
-                  <label className="block text-overline uppercase text-text-muted mb-1">Period</label>
-                  <select value={formData.budget_period}
-                    onChange={e => setFormData(f => ({ ...f, budget_period: e.target.value }))}
-                    className={inputCls}>
-                    <option value="per_transaction">Per transaction</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-overline uppercase text-text-muted mb-1">Risk threshold</label>
-                <select value={formData.risk_threshold}
-                  onChange={e => setFormData(f => ({ ...f, risk_threshold: e.target.value }))}
-                  className={inputCls}>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="strict">Strict</option>
-                </select>
-              </div>
-
-              <TagInput label="Category constraints" values={formData.category_constraints}
-                onChange={v => setFormData(f => ({ ...f, category_constraints: v }))} />
-              <TagInput label="Vendor blocklist" values={formData.vendor_blocklist}
-                onChange={v => setFormData(f => ({ ...f, vendor_blocklist: v }))} />
-              <TagInput label="Vendor allowlist (empty = all)" values={formData.vendor_allowlist}
-                onChange={v => setFormData(f => ({ ...f, vendor_allowlist: v }))} />
-
-              <div className="flex gap-2 pt-1">
-                <button onClick={saveContract} disabled={saving || !formData.name}
-                  className="flex-1 bg-accent-blue text-text-inverse text-label py-1.5 rounded-lg hover:bg-accent-blue-hover disabled:opacity-40 transition-colors duration-micro">
-                  {saving ? "Saving…" : "Save"}
-                </button>
-                <button onClick={() => { setShowForm(false); setEditingId(null); }}
-                  className="flex-1 border border-border text-text-secondary text-label py-1.5 rounded-lg hover:bg-surface-raised">
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <ContractForm
+              key={editing?.id ?? "new"}
+              initial={editing ? toFormValues(editing) : undefined}
+              contractId={editing?.id}
+              onSaved={async () => {
+                setShowForm(false);
+                setEditing(null);
+                await loadAll();
+              }}
+              onCancel={() => { setShowForm(false); setEditing(null); }}
+            />
           )}
 
           <div className="space-y-2">
             {contracts.map(c => (
               <div
                 key={c.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedContractId(c.id)}
-                className={`bg-surface border rounded-xl p-3 cursor-pointer transition-colors duration-micro ${
+                onKeyDown={e => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedContractId(c.id);
+                  }
+                }}
+                className={`bg-surface border rounded-xl p-3 cursor-pointer transition-colors duration-micro focus:outline-none focus-visible:ring-1 focus-visible:ring-accent-blue ${
                   c.id === selectedContractId ? "border-accent-blue ring-1 ring-accent-blue bg-accent-blue-subtle" :
                   c.active ? "border-border-subtle hover:border-border" : "border-border-subtle opacity-50"
                 }`}
@@ -380,20 +304,38 @@ export default function DashboardPage() {
                     {c.active ? "Active" : "Inactive"}
                   </span>
                 </div>
-                <p className="text-caption text-text-muted font-mono">SGD {c.budget_cap} / {c.budget_period} · {c.risk_threshold} risk</p>
+                <p className="text-caption text-text-muted font-mono">SGD {c.budget_cap} / {periodLabel(c.budget_period)} · {c.risk_threshold} risk</p>
                 {c.category_constraints?.length > 0 && (
                   <p className="text-caption text-text-muted mt-0.5">{c.category_constraints.join(", ")}</p>
                 )}
                 <div className="flex gap-2 mt-2">
-                  <button onClick={() => editContract(c)} className="text-caption text-accent-blue hover:text-accent-blue-hover">Edit</button>
+                  <button
+                    onClick={e => { e.stopPropagation(); editContract(c); }}
+                    className="text-caption text-accent-blue hover:text-accent-blue-hover"
+                  >
+                    Edit
+                  </button>
                   {c.active && (
-                    <button onClick={() => deactivateContract(c.id)} className="text-caption text-block-text hover:underline">Deactivate</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); deactivateContract(c); }}
+                      className="text-caption text-block-text hover:underline"
+                    >
+                      Deactivate
+                    </button>
                   )}
                 </div>
               </div>
             ))}
-            {contracts.length === 0 && (
-              <p className="text-caption text-text-muted text-center py-4">No contracts yet</p>
+            {contracts.length === 0 && !showForm && (
+              <div className="bg-surface border border-border rounded-xl py-8 text-center">
+                <p className="text-body text-text-muted mb-2">No contracts yet</p>
+                <button
+                  onClick={() => { setShowForm(true); setEditing(null); }}
+                  className="text-label text-accent-blue hover:text-accent-blue-hover"
+                >
+                  Create your first contract →
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -404,9 +346,9 @@ export default function DashboardPage() {
             <h2 className="font-display text-display-md text-text-primary">Transaction Log</h2>
             <select value={filterDecision} onChange={e => setFilterDecision(e.target.value)}
               className="text-caption bg-surface-raised border border-border rounded px-2 py-1 text-text-secondary focus:outline-none">
-              <option value="ALL">All</option>
-              <option value="ACCEPT">ACCEPT</option>
-              <option value="BLOCK">BLOCK</option>
+              <option value="ALL">All decisions</option>
+              <option value="ACCEPT">Accepted</option>
+              <option value="BLOCK">Blocked</option>
             </select>
           </div>
 
@@ -418,11 +360,11 @@ export default function DashboardPage() {
                   onClick={() => setExpandedTx(expandedTx === tx.id ? null : tx.id)}
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`text-caption font-bold px-2 py-0.5 rounded ${
+                    <span className={`text-caption font-semibold px-2 py-0.5 rounded ${
                       tx.overridden_by ? "bg-review-subtle text-review-text" :
                       tx.governance_decision === "ACCEPT" ? "bg-accept-subtle text-accept-text" : "bg-block-subtle text-block-text"
                     }`}>
-                      {tx.overridden_by ? "OVERRIDE" : tx.governance_decision}
+                      {tx.overridden_by ? "Override" : decisionLabel(tx.governance_decision)}
                     </span>
                     <div>
                       <p className="text-label font-medium text-text-primary">{tx.winner_vendor} — {tx.winner_item}</p>
@@ -431,7 +373,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-label font-semibold text-text-secondary font-mono">SGD {Number(tx.winner_price).toFixed(2)}</p>
-                    <p className="text-caption text-text-muted">{new Date(tx.created_at).toLocaleString()}</p>
+                    <p className="text-caption text-text-muted">{formatDate(tx.created_at)}</p>
                   </div>
                 </div>
 
@@ -467,7 +409,7 @@ export default function DashboardPage() {
                         <button
                           onClick={() => overrideTx(tx.id)}
                           disabled={overrideLoading === tx.id}
-                          className="text-caption bg-review text-text-inverse px-3 py-1.5 rounded-lg hover:brightness-110 transition-[filter] duration-micro"
+                          className="text-caption bg-review text-text-inverse px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity duration-micro"
                         >
                           {overrideLoading === tx.id ? "Approving…" : "Override and approve"}
                         </button>
@@ -482,47 +424,50 @@ export default function DashboardPage() {
             ))}
             {filteredTx.length === 0 && (
               <div className="bg-surface border border-border rounded-xl py-12 text-center">
-                <p className="text-body text-text-muted">No transactions for this contract yet</p>
+                <p className="text-body text-text-muted mb-2">No transactions for this contract yet</p>
+                <Link href="/" className="text-label text-accent-blue hover:text-accent-blue-hover">
+                  Run your first procurement →
+                </Link>
               </div>
             )}
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {reviewTx && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setReviewTx(null)}>
-          <div className="bg-surface-raised border border-border rounded-2xl max-w-lg w-full p-6 shadow-lg" onClick={e => e.stopPropagation()}>
-            <h3 className="font-display text-display-md text-text-primary mb-1">Transaction blocked</h3>
-            <p className="text-body text-text-secondary mb-4 font-mono">{reviewTx.winner_vendor} — {reviewTx.winner_item} · SGD {Number(reviewTx.winner_price).toFixed(2)}</p>
-            <p className="text-body text-block-text bg-block-subtle border border-block-border rounded-lg p-3 mb-4">
-              {reviewTx.rationale ?? reviewTx.full_result?.rationale ?? reviewTx.full_result?.decision?.rationale ?? "Governance rules failed."}
-            </p>
-            <p className="text-overline uppercase text-text-muted mb-2">Failed rules</p>
-            <ul className="space-y-2 mb-6">
-              {getFailedRules(reviewTx).map((r, i) => (
-                <li key={i} className="text-body text-text-secondary">
-                  <span className="font-medium text-block-text">{r.rule}</span>
-                  <span className="text-text-muted ml-2">{r.detail.slice(0, 150)}</span>
-                </li>
-              ))}
-              {getFailedRules(reviewTx).length === 0 && (
-                <li className="text-body text-text-muted">See governance rules above for details.</li>
-              )}
-            </ul>
-            <div className="flex gap-2">
-              <button onClick={() => setReviewTx(null)} className="flex-1 border border-border text-text-secondary py-2 rounded-lg text-label hover:bg-surface">
-                Close
-              </button>
-              <button
-                onClick={async () => { await overrideTx(reviewTx.id); setReviewTx(null); }}
-                disabled={overrideLoading === reviewTx.id}
-                className="flex-1 bg-review text-text-inverse py-2 rounded-lg text-label font-medium hover:brightness-110 transition-[filter] duration-micro"
-              >
-                {overrideLoading === reviewTx.id ? "Approving…" : "Override & execute"}
-              </button>
-            </div>
+        <Dialog onClose={() => setReviewTx(null)} ariaLabel="Transaction blocked — review">
+          <h3 className="font-display text-display-md text-text-primary mb-1">Transaction blocked</h3>
+          <p className="text-body text-text-secondary mb-4 font-mono">{reviewTx.winner_vendor} — {reviewTx.winner_item} · SGD {Number(reviewTx.winner_price).toFixed(2)}</p>
+          <p className="text-body text-block-text bg-block-subtle border border-block-border rounded-lg p-3 mb-4">
+            {reviewTx.rationale ?? reviewTx.full_result?.rationale ?? reviewTx.full_result?.decision?.rationale ?? "Governance rules failed."}
+          </p>
+          <p className="text-overline uppercase text-text-muted mb-2">Failed rules</p>
+          <ul className="space-y-2 mb-6">
+            {getFailedRules(reviewTx).map((r, i) => (
+              <li key={i} className="text-body text-text-secondary">
+                <span className="font-medium text-block-text">{r.rule}</span>
+                <span className="text-text-muted ml-2">{r.detail.slice(0, 150)}</span>
+              </li>
+            ))}
+            {getFailedRules(reviewTx).length === 0 && (
+              <li className="text-body text-text-muted">See governance rules above for details.</li>
+            )}
+          </ul>
+          <div className="flex gap-2">
+            <button onClick={() => setReviewTx(null)} className="flex-1 border border-border text-text-secondary py-2 rounded-lg text-label hover:bg-surface">
+              Close
+            </button>
+            <button
+              onClick={async () => { await overrideTx(reviewTx.id); setReviewTx(null); }}
+              disabled={overrideLoading === reviewTx.id}
+              className="flex-1 bg-review text-text-inverse py-2 rounded-lg text-label font-medium hover:opacity-90 transition-opacity duration-micro"
+            >
+              {overrideLoading === reviewTx.id ? "Approving…" : "Override & execute"}
+            </button>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

@@ -94,20 +94,22 @@ export default function ResultCard({
       : { border: "border-block-border", badgeBg: "bg-block-subtle", badgeText: "text-block-text", label: "✗ Blocked" };
 
   // Advantage pills — derived highlights, rendered as callouts not plain text (F5).
+  // No emojis (control-room aesthetic, cross-platform rendering); over-budget is
+  // amber (review = attention/overridable), not red (block = error).
   const cap = result.contractBudgetCap ?? budgetCap;
   const period = result.contractBudgetPeriod ?? budgetPeriod;
-  const pills: Array<{ icon: string; text: string; tone: "good" | "warn" }> = [];
+  const pills: Array<{ text: string; tone: "good" | "warn" }> = [];
   if (cap != null && Number.isFinite(price)) {
     const diff = cap - price;
     pills.push(
       diff >= 0
-        ? { icon: "💰", text: `${money(Math.round(diff), currency)} under budget`, tone: "good" }
-        : { icon: "⚠️", text: `${money(Math.round(-diff), currency)} over budget`, tone: "warn" }
+        ? { text: `${money(Math.round(diff), currency)} under budget`, tone: "good" }
+        : { text: `${money(Math.round(-diff), currency)} over budget`, tone: "warn" }
     );
   }
   const priciest = pitches.reduce((m, p) => Math.max(m, Number(p.price) || 0), 0);
   if (priciest > price) {
-    pills.push({ icon: "📉", text: `${money(priciest - price, currency)} below the priciest bid`, tone: "good" });
+    pills.push({ text: `${money(priciest - price, currency)} below the priciest bid`, tone: "good" });
   }
 
   return (
@@ -121,7 +123,7 @@ export default function ResultCard({
       </div>
 
       {/* Vendor — the single most dominant element on screen (F3/F5) */}
-      <h2 className="mt-4 font-display text-display-2xl leading-none text-text-primary">{result.vendor}</h2>
+      <h2 className="mt-4 break-words font-display text-display-2xl leading-none text-text-primary">{result.vendor}</h2>
       <p className="mt-1 font-display text-display-md font-light text-text-secondary">{result.item}</p>
 
       {/* Price — prominent, display font, large; currency recedes (weight contrast) */}
@@ -139,10 +141,9 @@ export default function ResultCard({
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-label ${
                 p.tone === "good"
                   ? "bg-accept-subtle text-accept-text"
-                  : "bg-block-subtle text-block-text"
+                  : "bg-review-subtle text-review-text"
               }`}
             >
-              <span aria-hidden>{p.icon}</span>
               {p.text}
             </span>
           ))}
@@ -156,7 +157,7 @@ export default function ResultCard({
         <button
           type="button"
           onClick={onRequestReview}
-          className="mt-4 rounded-lg bg-review px-4 py-2 text-label text-text-inverse transition hover:brightness-110 active:scale-[0.97]"
+          className="mt-4 rounded-lg bg-review px-4 py-2 text-label text-text-inverse transition hover:opacity-90 active:scale-[0.97]"
         >
           Request manual review
         </button>

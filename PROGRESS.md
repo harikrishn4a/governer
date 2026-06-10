@@ -58,6 +58,20 @@
 - [x] `db/migrations/002_transactions.sql` — transactions table
 - [x] `db/migrations/003_audit_events.sql` — audit_events table
 
+### feat-008: Design audit remediation (UI consistency pass)
+- [x] `apps/web/components/Wordmark.tsx` — single brand treatment, rendered once per page (was 3 divergent wordmarks on `/`)
+- [x] `apps/web/app/layout.tsx` — global top nav removed; sidebar is the shell on `/`, dashboard owns its header
+- [x] `apps/web/components/ContractForm.tsx` — single-source contract create/edit + TagInput (replaces 2 divergent copies in Sidebar + dashboard; unified default period `monthly`, allowlist field everywhere)
+- [x] `apps/web/components/Dialog.tsx` — modal primitive: role=dialog, aria-modal, Escape, focus trap + restore (replaces 3 drifted ad-hoc modals)
+- [x] `apps/web/lib/labels.ts` — humanized enums (`per_transaction` → "per transaction", ACCEPT → "Accepted") used by both pages
+- [x] `apps/web/app/page.tsx` — example-intent chips, disabled-CTA explanation, Next `Link`s, responsive active grid (`lg:` stack), dead auction branch removed, modal → Dialog
+- [x] `apps/web/app/dashboard/page.tsx` — rewritten: Wordmark header, skeleton loading, budget-stat hierarchy (numbers > name), responsive stat grid, keyboard-accessible contract cards, stopPropagation + confirm on Deactivate, empty-state CTAs, shorter dates, modal → Dialog
+- [x] `apps/web/components/AgentLog.tsx` — auto-scroll only sticks when reader is at the bottom
+- [x] `apps/web/components/ResultCard.tsx` — emojis removed from pills, over-budget → review/amber (not block/red), `break-words` on vendor, motion-law-compliant hovers (opacity, not brightness filter)
+
+**Verification passed:** `npx tsc --noEmit` → 0 errors; `npx next build` → both routes compile.
+**Deferred:** mobile sidebar strategy (DESIGN-SYSTEM.md declares desktop-only), NodeGraph 9px labels, log/result column takeover on completion.
+
 ## Pending Validation (keys not yet added)
 - [ ] TEST 1: Default contract + burger intent → ACCEPT + Stripe PI confirmed
 - [ ] TEST 2: Halal contract + burger intent → BLOCK + held Stripe PI

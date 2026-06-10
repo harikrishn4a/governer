@@ -35,6 +35,8 @@ function StatusDot({ status }: { status: LogEntry["status"] }) {
  */
 export default function AgentLog({ logs }: { logs: LogEntry[] }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const stickToBottom = useRef(true);
   const prevCount = useRef(0);
 
   // The render reads the previously-committed count so only *newly added* lines
@@ -44,10 +46,20 @@ export default function AgentLog({ logs }: { logs: LogEntry[] }) {
     prevCount.current = logs.length;
   });
 
-  // Pin scroll to the newest line.
+  // Pin scroll to the newest line — but only while the reader is already at the
+  // bottom. Scrolling up to re-read an earlier event suspends the auto-follow;
+  // returning to the bottom resumes it.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (stickToBottom.current) {
+      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   }, [logs.length]);
+
+  function handleScroll() {
+    const el = listRef.current;
+    if (!el) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -56,7 +68,7 @@ export default function AgentLog({ logs }: { logs: LogEntry[] }) {
       {logs.length === 0 ? (
         <p className="text-caption text-text-muted">Waiting for agents…</p>
       ) : (
-        <ol className="scroll-custom min-h-0 flex-1 space-y-2 overflow-y-auto pr-2">
+        <ol ref={listRef} onScroll={handleScroll} className="scroll-custom min-h-0 flex-1 space-y-2 overflow-y-auto pr-2">
           {logs.map((log, i) => {
             const delay = Math.max(0, i - baseCount) * 80; // 80ms stagger for new batch
             return (

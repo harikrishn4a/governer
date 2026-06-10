@@ -1,5 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
+import Wordmark from "./Wordmark";
+import ContractForm from "./ContractForm";
+import { PERIOD_USED_LABEL, periodLabel } from "@/lib/labels";
 
 // Shared contract shape. Exported so app/page.tsx can reuse it.
 export interface Contract {
@@ -39,211 +42,6 @@ interface SidebarProps {
   budgetRefreshKey?: number;
 }
 
-const PERIOD_LABEL: Record<string, string> = {
-  per_transaction: "per transaction",
-  daily: "today",
-  weekly: "this week",
-  monthly: "this month",
-};
-
-// ---- Inline tag input (constraints / blocklist) ----------------------------
-function TagInput({
-  label,
-  values,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  values: string[];
-  onChange: (v: string[]) => void;
-  placeholder: string;
-}) {
-  const [input, setInput] = useState("");
-  function addTag() {
-    const trimmed = input.trim();
-    if (trimmed && !values.includes(trimmed)) onChange([...values, trimmed]);
-    setInput("");
-  }
-  return (
-    <div>
-      <label className="block text-overline uppercase text-text-muted mb-1">{label}</label>
-      {values.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-1.5">
-          {values.map((v) => (
-            <span
-              key={v}
-              className="bg-surface-raised text-text-secondary text-caption px-2 py-0.5 rounded-full flex items-center gap-1"
-            >
-              {v}
-              <button
-                type="button"
-                onClick={() => onChange(values.filter((x) => x !== v))}
-                className="text-text-muted hover:text-block-text"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex gap-1">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addTag();
-            }
-          }}
-          placeholder={placeholder}
-          className="flex-1 bg-surface-raised border border-border rounded px-2 py-1 text-caption text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent-blue"
-        />
-        <button
-          type="button"
-          onClick={addTag}
-          className="text-caption bg-surface-raised border border-border text-text-secondary hover:text-text-primary px-2 py-1 rounded"
-        >
-          Add
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const BLANK_CONTRACT = {
-  name: "",
-  budget_cap: 100,
-  budget_period: "monthly",
-  category_constraints: [] as string[],
-  vendor_blocklist: [] as string[],
-  vendor_allowlist: [] as string[],
-  risk_threshold: "medium",
-  active: true,
-};
-
-// ---- New-contract inline form ----------------------------------------------
-function NewContractForm({
-  onSaved,
-  onCancel,
-}: {
-  onSaved: () => void | Promise<void>;
-  onCancel: () => void;
-}) {
-  const [form, setForm] = useState({ ...BLANK_CONTRACT });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      const r = await fetch("/api/contracts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e.error ?? `Save failed (${r.status})`);
-      }
-      await onSaved();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-    setSaving(false);
-  }
-
-  const inputCls =
-    "w-full bg-surface-raised border border-border rounded px-2 py-1 text-label text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent-blue";
-
-  return (
-    <div className="mt-2 rounded-lg border border-accent-blue-subtle bg-surface-raised/60 p-3 space-y-3 animate-col-rise">
-      <p className="text-overline uppercase text-text-muted">New contract</p>
-      {error && <p className="text-caption text-block-text">{error}</p>}
-
-      <div>
-        <label className="block text-overline uppercase text-text-muted mb-1">Name</label>
-        <input
-          value={form.name}
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          placeholder="e.g. Food &amp; dining"
-          className={inputCls}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-overline uppercase text-text-muted mb-1">Cap (SGD)</label>
-          <input
-            type="number"
-            value={form.budget_cap}
-            onChange={(e) => setForm((f) => ({ ...f, budget_cap: parseFloat(e.target.value) }))}
-            className={`${inputCls} font-mono`}
-          />
-        </div>
-        <div>
-          <label className="block text-overline uppercase text-text-muted mb-1">Period</label>
-          <select
-            value={form.budget_period}
-            onChange={(e) => setForm((f) => ({ ...f, budget_period: e.target.value }))}
-            className={inputCls}
-          >
-            <option value="per_transaction">Per transaction</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-overline uppercase text-text-muted mb-1">Risk threshold</label>
-        <select
-          value={form.risk_threshold}
-          onChange={(e) => setForm((f) => ({ ...f, risk_threshold: e.target.value }))}
-          className={inputCls}
-        >
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="strict">Strict</option>
-        </select>
-      </div>
-
-      <TagInput
-        label="Category constraints"
-        values={form.category_constraints}
-        onChange={(v) => setForm((f) => ({ ...f, category_constraints: v }))}
-        placeholder="e.g. food, transport"
-      />
-      <TagInput
-        label="Vendor blocklist"
-        values={form.vendor_blocklist}
-        onChange={(v) => setForm((f) => ({ ...f, vendor_blocklist: v }))}
-        placeholder="Type and press Enter"
-      />
-
-      <div className="flex gap-2 pt-0.5">
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || !form.name.trim()}
-          className="flex-1 bg-accent-blue text-text-inverse text-label font-medium py-1.5 rounded-lg hover:bg-accent-blue-hover disabled:opacity-40 transition-colors duration-micro"
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 border border-border text-text-secondary text-label py-1.5 rounded-lg hover:bg-surface-raised"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ---- Budget meter ----------------------------------------------------------
 function BudgetMeter({
   contractId,
@@ -281,7 +79,7 @@ function BudgetMeter({
   const pct = budget ? budget.percentUsed : 0;
   // Healthy green → amber at 70% → red at 90%.
   const barColor = pct >= 90 ? "bg-block" : pct >= 70 ? "bg-review" : "bg-accept";
-  const periodLabel = budget ? PERIOD_LABEL[budget.budgetPeriod] ?? budget.budgetPeriod : "";
+  const usedLabel = budget ? PERIOD_USED_LABEL[budget.budgetPeriod] ?? budget.budgetPeriod : "";
 
   return (
     <div className="border-t border-border-subtle px-4 py-4">
@@ -308,7 +106,7 @@ function BudgetMeter({
       </div>
       {budget && (
         <p className="mt-1.5 text-caption text-text-secondary font-mono">
-          {budget.spent.toFixed(2)} of {budget.budgetCap.toFixed(2)} SGD used {periodLabel}
+          {budget.spent.toFixed(2)} of {budget.budgetCap.toFixed(2)} SGD used {usedLabel}
         </p>
       )}
     </div>
@@ -332,9 +130,7 @@ export default function Sidebar({
     <aside className="flex flex-col w-72 shrink-0 self-stretch border-r border-border bg-surface">
       {/* Wordmark + version */}
       <div className="flex items-center gap-2 px-4 py-4 border-b border-border-subtle">
-        <span className="font-display text-display-md font-extrabold tracking-tight text-text-primary">
-          AgentBid
-        </span>
+        <Wordmark />
         <span className="text-overline uppercase font-mono text-text-muted border border-border-subtle rounded px-1.5 py-0.5">
           v0.1
         </span>
@@ -386,13 +182,15 @@ export default function Sidebar({
         </div>
 
         {showForm && (
-          <NewContractForm
-            onSaved={async () => {
-              setShowForm(false);
-              await onContractsChanged();
-            }}
-            onCancel={() => setShowForm(false)}
-          />
+          <div className="mt-2">
+            <ContractForm
+              onSaved={async () => {
+                setShowForm(false);
+                await onContractsChanged();
+              }}
+              onCancel={() => setShowForm(false)}
+            />
+          </div>
         )}
 
         <div className="space-y-1.5 mt-2">
@@ -428,7 +226,7 @@ export default function Sidebar({
                     />
                   </div>
                   <p className="text-caption text-text-muted mt-0.5 font-mono">
-                    SGD {c.budget_cap} · {c.budget_period}
+                    SGD {c.budget_cap} · {periodLabel(c.budget_period)}
                   </p>
                 </button>
               );

@@ -38,18 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${display.variable} ${ui.variable} ${mono.variable}`}
     >
+      {/* No global chrome: the sidebar is the shell on "/", the dashboard renders
+        * its own header. One Wordmark per page (see components/Wordmark.tsx). */}
       <body className="min-h-screen bg-bg font-sans text-text-primary">
-        <nav className="border-b border-border bg-surface px-6 py-3 flex items-center gap-6">
-          <span className="font-display text-body-lg font-extrabold tracking-tight text-text-primary">
-            AgentBid
-          </span>
-          <a href="/" className="font-sans text-label text-text-secondary hover:text-text-primary">
-            Procure
-          </a>
-          <a href="/dashboard" className="font-sans text-label text-text-secondary hover:text-text-primary">
-            Dashboard
-          </a>
-        </nav>
         <main>{children}</main>
       </body>
     </html>
