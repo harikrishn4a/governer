@@ -29,6 +29,7 @@ export async function proxyToEc2(req: Request, path: string): Promise<NextRespon
     status: upstream.status,
     headers: {
       "content-type": upstream.headers.get("content-type") ?? "application/json",
+      "cache-control": "no-store",
     },
   });
 }

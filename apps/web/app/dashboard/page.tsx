@@ -192,23 +192,29 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (selectedContractId) loadBudget(selectedContractId);
-  }, [selectedContractId, transactions]);
+  }, [selectedContractId, transactions, contracts]);
+
+  function selectContract(id: string) {
+    setSelectedContractId(id);
+    loadBudget(id);
+  }
 
   async function loadAll() {
     setLoading(true);
     setLoadError(null);
     try {
       const [cr, tr] = await Promise.all([
-        fetch("/api/contracts").then(r => { if (!r.ok) throw new Error(`contracts ${r.status}`); return r.json(); }),
-        fetch("/api/transactions").then(r => { if (!r.ok) throw new Error(`transactions ${r.status}`); return r.json(); }),
+        fetch("/api/contracts", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(`contracts ${r.status}`); return r.json(); }),
+        fetch("/api/transactions", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(`transactions ${r.status}`); return r.json(); }),
       ]);
-      const contractList = Array.isArray(cr) ? cr : [];
+      const contractList = (Array.isArray(cr) ? cr : []).filter((c: Contract) => c.active);
       setContracts(contractList);
       setTransactions(Array.isArray(tr) ? tr : []);
-      if (!selectedContractId && contractList.length > 0) {
+      setSelectedContractId((prev) => {
+        if (prev && contractList.some((c: Contract) => c.id === prev)) return prev;
         const food = contractList.find((c: Contract) => c.name.toLowerCase().includes("food"));
-        setSelectedContractId(food?.id ?? contractList[0].id);
-      }
+        return food?.id ?? contractList[0]?.id ?? "";
+      });
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : String(err));
     }
@@ -217,7 +223,7 @@ export default function DashboardPage() {
 
   async function loadBudget(contractId: string) {
     try {
-      const res = await fetch(`/api/contracts/${contractId}/budget`);
+      const res = await fetch(`/api/contracts/${contractId}/budget?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) setBudget(await res.json());
     } catch {}
   }
@@ -225,6 +231,7 @@ export default function DashboardPage() {
   async function saveContract() {
     setSaving(true);
     setError(null);
+    let savedId: string | null = editingId;
     try {
       if (editingId) {
         const r = await fetch(`/api/contracts/${editingId}`, {
@@ -239,12 +246,15 @@ export default function DashboardPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
         });
-        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error ?? `Save failed (${r.status})`); }
+        const created = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(created.error ?? `Save failed (${r.status})`);
+        savedId = created.id ?? null;
       }
       setShowForm(false);
       setEditingId(null);
       setFormData({ ...BLANK_CONTRACT });
       await loadAll();
+      if (savedId) selectContract(savedId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -261,14 +271,26 @@ export default function DashboardPage() {
   }
 
   async function deleteContractHandler(id: string) {
+    setError(null);
     try {
-      await fetch(`/api/contracts/${id}`, { method: "DELETE" });
-      if (selectedContractId === id) {
-        setSelectedContractId("");
-        setBudget(null);
-      }
+      const res = await fetch(`/api/contracts/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : `Delete failed (${res.status})`);
+
+      setContracts((prev) => {
+        const next = prev.filter((c) => c.id !== id);
+        if (selectedContractId === id) {
+          const nextId = next[0]?.id ?? "";
+          setSelectedContractId(nextId);
+          if (nextId) loadBudget(nextId);
+          else setBudget(null);
+        }
+        return next;
+      });
       await loadAll();
-    } catch {}
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
     setDeleteConfirm(null);
   }
 
@@ -305,7 +327,8 @@ export default function DashboardPage() {
   const selectedContract = contracts.find(c => c.id === selectedContractId);
 
   const filteredTx = transactions.filter(t => {
-    if (selectedContractId && String(t.contract_id) !== String(selectedContractId)) return false;
+    if (!selectedContractId) return false;
+    if (String(t.contract_id) !== String(selectedContractId)) return false;
     if (filterDecision === "ALL") return true;
     if (filterDecision === "ACCEPT") {
       return t.governance_decision === "ACCEPT" || !!t.overridden_by;
@@ -349,10 +372,10 @@ export default function DashboardPage() {
             </div>
             <select
               value={selectedContractId}
-              onChange={e => setSelectedContractId(e.target.value)}
+              onChange={e => selectContract(e.target.value)}
               className="text-label bg-surface-raised border border-border rounded-lg px-3 py-2 text-text-secondary"
             >
-              {contracts.filter(c => c.active).map(c => (
+              {contracts.map(c => (
                 <option key={c.id} value={c.id}>{c.name.trim()}</option>
               ))}
             </select>
@@ -638,10 +661,10 @@ export default function DashboardPage() {
             {contracts.map(c => (
               <div
                 key={c.id}
-                onClick={() => setSelectedContractId(c.id)}
+                onClick={() => selectContract(c.id)}
                 className={`bg-surface border rounded-xl p-3 cursor-pointer transition-colors duration-micro ${
                   c.id === selectedContractId ? "border-accent-blue ring-1 ring-accent-blue bg-accent-blue-subtle" :
-                  c.active ? "border-border-subtle hover:border-border" : "border-border-subtle opacity-50"
+                  "border-border-subtle hover:border-border"
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -655,10 +678,8 @@ export default function DashboardPage() {
                   <p className="text-caption text-text-muted mt-0.5">{c.category_constraints.join(", ")}</p>
                 )}
                 <div className="flex gap-2 mt-2">
-                  <button onClick={() => editContract(c)} className="text-caption text-accent-blue hover:text-accent-blue-hover">Edit</button>
-                  {c.active && (
-                    <button onClick={() => deactivateContract(c.id)} className="text-caption text-block-text hover:underline">Deactivate</button>
-                  )}
+                  <button onClick={(e) => { e.stopPropagation(); editContract(c); }} className="text-caption text-accent-blue hover:text-accent-blue-hover">Edit</button>
+                  <button onClick={(e) => { e.stopPropagation(); deactivateContract(c.id); }} className="text-caption text-block-text hover:underline">Deactivate</button>
                   <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(c.id); }} className="text-caption text-block-text hover:underline">Delete</button>
                 </div>
               </div>
@@ -794,7 +815,9 @@ export default function DashboardPage() {
             })}
             {filteredTx.length === 0 && (
               <div className="bg-surface border border-border rounded-xl py-12 text-center">
-                <p className="text-body text-text-muted">No transactions for this contract yet</p>
+                <p className="text-body text-text-muted">
+                  {selectedContract ? `No transactions for ${selectedContract.name.trim()} yet` : "Select a contract to view its transaction log"}
+                </p>
               </div>
             )}
           </div>

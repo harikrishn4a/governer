@@ -140,13 +140,25 @@ export async function getTransaction(id: string) {
   return rows[0] ?? null;
 }
 
-export async function deleteContract(id: string) {
+export async function deleteContract(id: string): Promise<{ contract: Record<string, unknown> | null; archived: boolean }> {
   const pool = await getPool();
-  const { rows } = await pool.query(
-    "DELETE FROM spending_contracts WHERE id = $1 RETURNING *",
-    [id]
-  );
-  return rows[0] ?? null;
+  try {
+    const { rows } = await pool.query(
+      "DELETE FROM spending_contracts WHERE id = $1 RETURNING *",
+      [id]
+    );
+    return { contract: rows[0] ?? null, archived: false };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("foreign key") || msg.includes("violates")) {
+      const { rows } = await pool.query(
+        "UPDATE spending_contracts SET active = false WHERE id = $1 RETURNING *",
+        [id]
+      );
+      return { contract: rows[0] ?? null, archived: true };
+    }
+    throw err;
+  }
 }
 
 export async function getContractSpend(contractId: string, period: string): Promise<number> {

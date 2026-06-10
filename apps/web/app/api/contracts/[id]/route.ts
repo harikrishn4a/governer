@@ -21,8 +21,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   if (shouldProxyToEc2()) return proxyToEc2(req, `/api/contracts/${params.id}`);
   try {
-    await deleteContract(params.id);
-    return NextResponse.json({ ok: true });
+    const { archived } = await deleteContract(params.id);
+    return NextResponse.json({ ok: true, archived });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[DELETE /api/contracts/:id]", msg);
