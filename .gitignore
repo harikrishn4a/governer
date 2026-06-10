@@ -4,3 +4,6 @@ node_modules/
 apps/web/.next/
 apps/web/.env.local
 *.tsbuildinfo
+.next/
+*.log
+node_modules/.cache
