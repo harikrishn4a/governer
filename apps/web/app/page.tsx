@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Sidebar, { type Contract, type ProcureMode } from "@/components/Sidebar";
 import RunTheatre from "@/components/RunTheatre";
+import AuctionTheatre from "@/components/AuctionTheatre";
 import { useAgentStream } from "@/lib/useAgentStream";
 
 const EXAMPLES = [
@@ -11,10 +12,18 @@ const EXAMPLES = [
   "A standing desk converter under $250",
 ];
 
+const AUCTION_EXAMPLES = [
+  "Affordable, comfortable direct flight to Kuala Lumpur tomorrow, 1 adult, under $300 SGD",
+  "Direct flight to Bangkok this weekend, 1 adult, economy, under $350 SGD",
+  "Catering for a 20-person office lunch on Friday under $400",
+];
+
 export default function ProcurePage() {
   const [intent, setIntent] = useState("");
   const [contractId, setContractId] = useState("");
   const [mode, setMode] = useState<ProcureMode>("find");
+  // Mode captured at submit time — the sidebar toggle could change mid-run.
+  const [runMode, setRunMode] = useState<ProcureMode>("find");
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [contractsLoading, setContractsLoading] = useState(true);
   const [transactionId, setTransactionId] = useState<string | null>(null);
@@ -24,7 +33,7 @@ export default function ProcurePage() {
   const [showBlockReview, setShowBlockReview] = useState(false);
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0);
 
-  const { graphState, result, isComplete } = useAgentStream(transactionId);
+  const { graphState, auctionState, result, isComplete } = useAgentStream(transactionId);
   const selectedContract = contracts.find((c) => c.id === contractId);
 
   const active = transactionId !== null;
@@ -64,15 +73,11 @@ export default function ProcurePage() {
       setError("Select a spending contract before running the agents.");
       return;
     }
-    if (mode === "auction") {
-      setError("Auction mode is coming soon — switch to Find for the live demo.");
-      return;
-    }
-
     setError(null);
     setOverrideSuccess(false);
     setShowBlockReview(false);
     setTransactionId(null);
+    setRunMode(mode);
 
     try {
       const res = await fetch("/api/procure", {
@@ -135,12 +140,16 @@ export default function ProcurePage() {
               Agentic procurement
             </p>
             <h1 className="font-serif mt-3 text-[2.7rem] font-semibold leading-[1.08] tracking-tight text-text-primary sm:text-[3.1rem]">
-              Procurement, negotiated<br />by a team of AI agents.
+              {mode === "auction" ? (
+                <>Vendors bid.<br />Your agent decides.</>
+              ) : (
+                <>Procurement, negotiated<br />by a team of AI agents.</>
+              )}
             </h1>
             <p className="mt-5 max-w-xl text-[1.02rem] leading-relaxed text-text-secondary">
-              Describe what you need. Agents search the open web, run an adversarial
-              supplier negotiation, enforce your spending contract, and settle payment —
-              while you watch every step.
+              {mode === "auction"
+                ? "Describe what you need. Your tender is broadcast to vendor agents who bid, counter-bid and pitch across live rounds — anchored to real prices Exa finds — before governance verifies and Stripe settles."
+                : "Describe what you need. Agents search the open web, run an adversarial supplier negotiation, enforce your spending contract, and settle payment — while you watch every step."}
             </p>
 
             <form onSubmit={handleSubmit} className="mt-8">
@@ -168,7 +177,7 @@ export default function ProcurePage() {
                   </span>
                   <button
                     type="submit"
-                    disabled={!intent.trim() || !contractId || mode === "auction"}
+                    disabled={!intent.trim() || !contractId}
                     className="rounded-lg bg-accent-blue px-5 py-2 text-[0.9rem] font-medium text-text-inverse transition hover:bg-accent-blue-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Run agents →
@@ -184,7 +193,7 @@ export default function ProcurePage() {
             </form>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              {EXAMPLES.map((ex) => (
+              {(mode === "auction" ? AUCTION_EXAMPLES : EXAMPLES).map((ex) => (
                 <button
                   key={ex}
                   onClick={() => setIntent(ex)}
@@ -215,13 +224,17 @@ export default function ProcurePage() {
               </button>
             </div>
 
-            <RunTheatre
-              phase={graphState.phase}
-              vendors={graphState.vendors}
-              winner={graphState.winner ?? result?.vendor}
-              result={result}
-              intent={intent}
-            />
+            {runMode === "auction" ? (
+              <AuctionTheatre auction={auctionState} result={result} intent={intent} />
+            ) : (
+              <RunTheatre
+                phase={graphState.phase}
+                vendors={graphState.vendors}
+                winner={graphState.winner ?? result?.vendor}
+                result={result}
+                intent={intent}
+              />
+            )}
 
             {result && (
               <VerdictBar

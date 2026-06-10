@@ -20,12 +20,6 @@ export async function POST(req: NextRequest) {
   if (!contractId?.trim()) {
     return NextResponse.json({ error: "contractId is required — select a spending contract" }, { status: 400 });
   }
-  if (mode === "auction") {
-    return NextResponse.json(
-      { error: "Auction mode is not implemented yet. Switch to Find mode for the burger demo." },
-      { status: 501 }
-    );
-  }
 
   // One id used end-to-end: the SSE channel key AND the DB transaction id.
   const transactionId = randomUUID();
@@ -42,7 +36,9 @@ export async function POST(req: NextRequest) {
         contractId: contractId.trim(),
         mode: mode ?? "find",
       }),
-      signal: AbortSignal.timeout(120_000),
+      // Auction worst case (anchor discovery + 2 bidding rounds + judge +
+      // governance) can exceed find mode's envelope — allow 180s.
+      signal: AbortSignal.timeout(180_000),
     }).catch((err) => {
       console.error("[procure] agents /run dispatch failed", transactionId, String(err));
     })

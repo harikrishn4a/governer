@@ -114,3 +114,11 @@ Agents read this before making choices that affect the project structure.
 - **Rejected alternatives**: Not yet documented
 - **Constraints introduced**: Not yet documented
 - **Revisit when**: Not yet documented
+---
+
+### 2026-06-10: Auction mode architecture — prompt-only bidding policies anchored to real Exa prices
+- **Decision**: Auction mode is a sibling pipeline (`apps/agents/src/agents/auction.ts`) that reuses discovery/governance/Stripe/DB unchanged by normalizing the winning bid to `WinnerPaymentIntent`. Flight tenders use 5 pre-built vendor profiles (Traveloka, Skyscanner, Trip.com, Scoot, AirAsia) with domain-restricted Exa `searchAndContents` (`includeDomains` + livecrawl, never the Exa Agent API) for real published-price anchors; other categories auto-research bidder profiles via Exa + LLM. Bidding runs 2 rounds (sealed → best-and-final with full competitor board); policies are prompt-encoded only with structural validation (price > 0, sanity asserted in tests, failed bidders carry forward). Vendors without a real discovered price are skipped; <2 anchors aborts the run. Terminal SSE event remains `agent:complete`/`governance` so stream close, persistence and override flow are shared with find mode.
+- **Reason**: Anchoring simulated negotiation behavior to genuinely live prices keeps the demo honest ("real prices, simulated vendor behavior"); reusing the find-mode tail keeps governance/Stripe/DB code single-path; the Exa Agent API's 2–3 min latency is unacceptable for a 2-round live auction.
+- **Rejected alternatives**: Code-enforced price clamps (user chose prompt-only characters); estimated/median price fallbacks for unpriced vendors (user chose authenticity — skip them); 3 bidding rounds (latency).
+- **Constraints introduced**: Auction discovery must not use the Exa Agent API. New SSE types (`auction:anchor`, `auction:bid`, `auction:round_start/complete`, `bidder:skipped`) pass through stream-store untyped — UI derivations live in `useAgentStream.deriveAuction`. `llmCallJSON` now strips markdown fences (`coerceJson`); governance INTENT_MATCH prompt states today's date to resolve relative dates like "tomorrow".
+- **Revisit when**: Vendors expose real bidding/quote APIs, or auction needs persistent researched-vendor profiles across runs.

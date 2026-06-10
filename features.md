@@ -187,3 +187,39 @@ Production app running on Vercel (web) + ECS Fargate (agents). CloudWatch dashbo
 - [ ] Vercel deploy web app
 
 **Notes:**
+
+---
+
+## Feature 009: Auction mode — tender broadcast + vendor bidding agents
+
+**What the user sees:**
+Toggling "Auction" in the sidebar and submitting an intent (e.g. "affordable, comfortable direct flight to Kuala Lumpur tomorrow, 1 adult, under $300 SGD") broadcasts a tender. Exa discovers real published prices from booking sites; vendor bidding agents (Traveloka, Skyscanner, Trip.com, Scoot, AirAsia for flights; LLM-researched profiles for any other category) compete across 2 rounds — sealed offers, then open best-and-final counter-bids with full competitor visibility. A live bid board shows each vendor's offer vs published price, value-adds, and pitch. An LLM judge ranks the bids, governance verifies the winner against the spending contract, and Stripe (sandbox) executes. Full dashboard parity with find mode: live log feed, node graph, theatre, result card.
+
+**Tasks:**
+- [x] `apps/agents/src/agents/types.ts` — TenderBroadcast, VendorAnchor, VendorBid, AuctionRound, AuctionEvaluation, AuctionOutcome, TravelDetails
+- [x] `apps/agents/src/agents/vendors/flight-vendors.ts` — 5 pre-built vendor profiles (prompt-only bidding policies)
+- [x] `apps/agents/src/tools/exa.ts` — `includeDomains`/livecrawl support + `exaResearchVendor`
+- [x] `apps/agents/src/agents/vendors/generic-vendor.ts` — researched bidder profiles for non-flight categories
+- [x] `apps/agents/src/agents/auction.ts` — tender → anchors → 2 bidding rounds → judge → WinnerPaymentIntent
+- [x] `apps/agents/src/index.ts` — auction branch replaces 501 (find branch untouched)
+- [x] `apps/agents/src/test-auction.ts` + `test:auction` npm script
+- [x] `apps/web/lib/useAgentStream.ts` — AuctionState derivation + auction log lines
+- [x] `apps/web/components/AuctionTheatre.tsx` — tender / bid board / judge / review scenes
+- [x] `apps/web/app/page.tsx` + `components/Sidebar.tsx` — enable auction mode, capture mode at submit
+- [x] `apps/web/app/api/procure/route.ts` — remove 501 guard, raise dispatch timeout to 180s
+- [x] `apps/agents/src/test-auction-e2e.ts` — ACCEPT + BLOCK + override cases
+
+**Acceptance criteria:**
+- POST /run with `mode:"auction"` returns 200 + transactionId; both 501 guards removed
+- Flight intent → discovery restricted to the 5 vendor domains; ≥2 real Exa price anchors or loud failure; unpriced vendors skipped and visible in UI
+- All resolved bidders bid in both rounds; at least one round-2 counter-bid undercuts its round-1 offer; character behaviors visible (Skyscanner holds price, Scoot zero value-adds, AirAsia urgency conditions)
+- Judge ranking covers all bidders; winner in-budget when satisfiable
+- Governance runs all 5 rules; ACCEPT → Stripe PI succeeded; BLOCK → requires_confirmation + override works
+- `transactions.full_result.mode === "auction"` with full transcript
+- Find mode regression passes unchanged
+- `npx tsc --noEmit` 0 errors both apps; web `npm run build` passes; `npm run test:auction` exits 0
+
+**Notes:**
+- Auction discovery must NOT use the Exa Agent API (2–3 min latency) — searchAndContents + includeDomains only
+- Bidding policies are prompt-only by user decision; tests assert a sanity band (0.5×–1.2× of published price) instead of clamping
+- Terminal SSE event stays `agent:complete`/`governance` so stream close + override flow work unchanged

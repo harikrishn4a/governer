@@ -154,6 +154,34 @@
       ],
       "agent_notes": "ai@^5.0.197 pinned. legacy-peer-deps in apps/agents/.npmrc and apps/web/.npmrc. Direct OpenAI/Anthropic still works when gateway key unset.",
       "last_updated": "2026-06-10"
+    },
+    {
+      "id": "feat-009",
+      "priority": 9,
+      "area": "agents+web",
+      "title": "Auction mode — tender broadcast + vendor bidding agents",
+      "user_visible_behavior": "Auction toggle enabled. Intent becomes a tender; Exa finds real published prices (5 flight sites pre-built, LLM-researched profiles otherwise); vendor agents bid across 2 rounds on a live bid board; LLM judge ranks; governance + Stripe execute. Full dashboard parity with find mode.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "cd apps/agents && npm run test:auction",
+        "cd apps/agents && npm run test:auction-e2e",
+        "cd apps/agents && npx tsc --noEmit",
+        "cd apps/web && npx tsc --noEmit && npm run build",
+        "curl -s -X POST localhost:4000/run -H 'Content-Type: application/json' -d '{\"intent\":\"direct flight to Kuala Lumpur tomorrow under $300 SGD\",\"mode\":\"auction\"}' | jq .decision",
+        "Find mode regression: burger demo completes end-to-end unchanged"
+      ],
+      "evidence": [
+        "npm run test:auction → VALIDATION PASSED, 33/33 checks (2 rounds, 5 bidders, sanity bands, judge ranking, abort on <2 anchors)",
+        "npm run test:auction-e2e → PASSED with LIVE Exa anchors: Traveloka 74.40, Skyscanner 84, Trip.com 96, AirAsia 77 (Scoot skipped, no live fare); ACCEPT → Stripe PI succeeded; cap-150 BLOCK → held PI → override confirmed",
+        "Server-level POST /run mode=auction → ACCEPT, Traveloka SGD 74.40, pi_3TghRZ…, full_result.mode=auction persisted in postgres + audit event",
+        "SSE replay shows full auction vocabulary: 4× auction:anchor, 2× round_start/complete, 8× auction:bid, bidder:skipped, judge + governance terminal event",
+        "Generic path (catering, non-flight) → 5 researched bidders, 2 rounds, judge ranked, governance BLOCK on SGD 100 default cap (correct)",
+        "Find regression: burger demo via POST /run → ACCEPT, 3 pitches, 5 options, 3 negotiation rounds, response shape unchanged; npm run test:discovery → PASSING",
+        "agents tsc 0 errors; web tsc 0 errors + npm run build PASSING (2026-06-10)"
+      ],
+      "agent_notes": "Prompt-only bidding policies (user decision). Skip vendors without real Exa price anchors; abort if <2 anchors. 2 rounds: sealed then open best-and-final. Auction discovery uses searchAndContents+includeDomains, never the Exa Agent API.",
+      "last_updated": "2026-06-10"
     }
   ]
 }

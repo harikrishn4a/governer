@@ -20,7 +20,7 @@ Extract:
 Return JSON: { "category": "...", "location": "...", "budget": 30, "currency": "SGD", "constraints": [] }
 All fields are optional except currency. Return null for fields not mentioned.`;
 
-async function parseIntent(raw: string): Promise<UserIntent> {
+export async function parseIntent(raw: string): Promise<UserIntent> {
   logger.section("PHASE 1 — INTENT PARSING");
   logger.info("intent:parse — raw input received", { raw });
 

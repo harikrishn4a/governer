@@ -3,6 +3,7 @@ dotenv.config({ path: `${__dirname}/../../../.env` });
 
 import express from "express";
 import { runProcurement, runFullProcurement } from "./agents/procurement";
+import { runAuctionPipeline } from "./agents/auction";
 import { runGovernance } from "./agents/governance";
 import { getActiveContract, saveTransaction, saveAuditEvent, getAllContracts, getTransaction } from "./tools/db";
 import { confirmHeldTransaction } from "./tools/stripe";
@@ -29,13 +30,6 @@ app.post("/run", async (req, res) => {
     return res.status(400).json({ error: "intent is required" });
   }
 
-  if (mode === "auction") {
-    return res.status(501).json({
-      error: "Auction mode is not implemented yet",
-      detail: "Use find mode for the burger demo. Auction mode (flight search) is planned for a later sprint.",
-    });
-  }
-
   // txId is supplied by the web /api/procure (so it can return immediately and
   // subscribe to the stream). Fall back to a fresh id for direct callers/tests.
   // This same id is used for every stream event AND as the DB transaction id.
@@ -47,6 +41,123 @@ app.post("/run", async (req, res) => {
     emit({ type, agent, data, timestamp: new Date().toISOString() });
 
   const requestStart = Date.now();
+
+  // ── AUCTION MODE — tender broadcast → bidding rounds → judge → governance ──
+  if (mode === "auction") {
+    try {
+      logger.section("POST /run — AGENTBID AUCTION PIPELINE");
+      logger.info("request:received", {
+        txId,
+        mode: "auction",
+        intent: intent.trim(),
+        contractId: contractId ?? "(default)",
+        timestamp: new Date().toISOString(),
+      });
+
+      const { intent: parsedIntent, outcome } = await runAuctionPipeline(intent.trim(), txId, emit);
+      const winner = outcome.winner;
+
+      logger.section("PHASE 5a — CONTRACT LOAD");
+      const contract = await getActiveContract(contractId);
+      logger.info("contract:loaded", {
+        id: contract.id,
+        name: contract.name,
+        budgetCap: `SGD ${contract.budgetCap}`,
+        budgetPeriod: contract.budgetPeriod,
+      });
+
+      await fire("agent:start", "governance");
+      const decision = await runGovernance(winner, parsedIntent, contract);
+
+      logger.section("PHASE 7 — DATABASE PERSIST");
+      await saveTransaction({
+        id: txId,
+        user_intent: intent.trim(),
+        contract_id: contract.id,
+        winner_vendor: winner.vendor,
+        winner_item: winner.item,
+        winner_price: winner.price,
+        governance_decision: decision.decision,
+        rationale: decision.rationale,
+        checked_rules: decision.checkedRules,
+        requires_human_review: decision.requiresHumanReview,
+        stripe_payment_intent_id: decision.stripePaymentIntentId ?? null,
+        stripe_status: decision.decision === "ACCEPT" ? "succeeded" : "requires_confirmation",
+        full_result: {
+          mode: "auction",
+          tender: outcome.tender,
+          anchors: outcome.anchors,
+          skipped: outcome.skipped,
+          bidders: outcome.bidders,
+          rounds: outcome.rounds,
+          evaluation: outcome.evaluation,
+          winner,
+          decision,
+        },
+      });
+
+      await saveAuditEvent({
+        transaction_id: txId,
+        contract_id: contract.id,
+        event_type: decision.decision,
+        detail: decision.rationale,
+      });
+
+      const auctionExtras = {
+        mode: "auction" as const,
+        auction: {
+          anchors: outcome.anchors,
+          skipped: outcome.skipped,
+          bidders: outcome.bidders,
+          rounds: outcome.rounds,
+          evaluation: outcome.evaluation,
+        },
+      };
+
+      const payload = {
+        transactionId: txId,
+        decision: decision.decision,
+        vendor: winner.vendor,
+        item: winner.item,
+        price: winner.price,
+        currency: "SGD",
+        rationale: decision.rationale,
+        checkedRules: decision.checkedRules,
+        requiresHumanReview: decision.requiresHumanReview,
+        stripePaymentIntentId: decision.stripePaymentIntentId ?? null,
+        procurementRationale: winner.procurementRationale,
+        contractId: contract.id,
+        contractName: contract.name,
+        contractBudgetCap: contract.budgetCap,
+        contractBudgetPeriod: contract.budgetPeriod,
+        negotiation: winner.conversation ?? [],
+        ranking: winner.ranking ?? [],
+        ...auctionExtras,
+      };
+
+      // Terminal event — same agent/type as find mode so the SSE stream closes
+      // and the override flow works unchanged.
+      await fire("agent:complete", "governance", payload);
+
+      const totalMs = Date.now() - requestStart;
+      logger.section("REQUEST COMPLETE");
+      logger.info("response:summary", {
+        transactionId: txId,
+        mode: "auction",
+        decision: decision.decision,
+        vendor: winner.vendor,
+        price: `SGD ${winner.price}`,
+        totalMs,
+      });
+
+      return res.json(payload);
+    } catch (err) {
+      const totalMs = Date.now() - requestStart;
+      logger.error("auction-pipeline:failed", { error: String(err), totalMs });
+      await fire("error", "pipeline", { message: String(err) });
+      return res.status(500).json({ error: "Auction pipeline failed", detail: String(err) });
+    }
+  }
 
   try {
     logger.section("POST /run — AGENTBID FULL PIPELINE");

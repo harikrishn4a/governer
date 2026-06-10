@@ -218,15 +218,53 @@ export async function exaSearch(query: string, numResults = 5) {
   });
 }
 
-export async function exaSearchAndContents(query: string, numResults = 8) {
-  logger.debug("exa:searchAndContents", { query, numResults });
+export interface SearchExtras {
+  includeDomains?: string[];
+  livecrawl?: "always" | "fallback" | "never";
+}
+
+export async function exaSearchAndContents(query: string, numResults = 8, extras?: SearchExtras) {
+  logger.debug("exa:searchAndContents", { query, numResults, includeDomains: extras?.includeDomains });
   return exa.searchAndContents(query, {
     numResults,
     type: "neural",
     useAutoprompt: true,
     text: { maxCharacters: 1500 },
     highlights: { numSentences: 4, highlightsPerUrl: 3 },
+    ...(extras?.includeDomains ? { includeDomains: extras.includeDomains } : {}),
+    ...(extras?.livecrawl ? { livecrawl: extras.livecrawl } : {}),
   });
+}
+
+// Research a vendor's commercial behavior for the generic auction path —
+// parallel searches mirroring the web app's searchSupplierInfo pattern.
+export async function exaResearchVendor(vendor: string): Promise<string> {
+  logger.debug("exa:researchVendor", { vendor });
+  const queries = [
+    `${vendor} company about pricing strategy`,
+    `${vendor} discounts promotions deals policy`,
+    `${vendor} customer reviews reputation`,
+  ];
+  const settled = await Promise.allSettled(
+    queries.map((q) =>
+      exa.searchAndContents(q, {
+        numResults: 3,
+        type: "neural",
+        useAutoprompt: true,
+        text: { maxCharacters: 800 },
+        highlights: { numSentences: 3, highlightsPerUrl: 2 },
+      })
+    )
+  );
+  const blocks: string[] = [];
+  for (const s of settled) {
+    if (s.status !== "fulfilled") continue;
+    for (const r of s.value.results ?? []) {
+      const highlights = (r.highlights ?? []).join(" … ");
+      blocks.push(`${r.title ?? ""} (${r.url})\n${highlights}\n${(r.text ?? "").slice(0, 400)}`);
+    }
+  }
+  return blocks.join("\n\n---\n\n");
 }
 
 export async function exaGetContents(urls: string[]) {

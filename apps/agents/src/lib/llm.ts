@@ -128,12 +128,32 @@ export async function llmCall(opts: LLMCallOptions): Promise<string> {
   return llmCallDirect(opts, model);
 }
 
+// Models sometimes wrap JSON in ```fences``` or preamble despite instructions —
+// strip fences / slice to the outermost JSON value before parsing.
+function coerceJson(raw: string): string {
+  let s = raw.trim();
+  const fence = s.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  if (fence) s = fence[1].trim();
+  if (!s.startsWith("{") && !s.startsWith("[")) {
+    const objStart = s.indexOf("{");
+    const arrStart = s.indexOf("[");
+    const start = [objStart, arrStart].filter((i) => i !== -1).sort((a, b) => a - b)[0];
+    if (start !== undefined) {
+      const open = s[start];
+      const close = open === "{" ? "}" : "]";
+      const end = s.lastIndexOf(close);
+      if (end > start) s = s.slice(start, end + 1);
+    }
+  }
+  return s;
+}
+
 export async function llmCallJSON<T>(opts: LLMCallOptions): Promise<T> {
   const system = opts.system + "\n\nReturn ONLY valid JSON. No markdown fences. No preamble.";
   const raw = await llmCall({ ...opts, system });
 
   try {
-    return JSON.parse(raw) as T;
+    return JSON.parse(coerceJson(raw)) as T;
   } catch {
     logger.warn("JSON parse failed on first attempt, retrying with correction");
     const corrected = await llmCall({
@@ -148,6 +168,6 @@ export async function llmCallJSON<T>(opts: LLMCallOptions): Promise<T> {
         },
       ],
     });
-    return JSON.parse(corrected) as T;
+    return JSON.parse(coerceJson(corrected)) as T;
   }
 }

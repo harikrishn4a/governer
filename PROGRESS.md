@@ -7,7 +7,7 @@
 - Target event: NEXT Hackathon @ SuperAI Singapore, 36-hour build, June 9–11 2025
 - Prize targets: Top 5 Overall + Best Use of Exa + Best Use of Stripe
 - Latest commit: governer-feature (feat-008 gateway integration)
-- Test status: `npm run test:discovery` → PASSING
+- Test status: `npm run test:discovery` → PASSING; `npm run test:auction` → PASSING (33/33); `npm run test:auction-e2e` → PASSING (live Exa + Stripe sandbox)
 - Typecheck agents: `npx tsc --noEmit` → 0 errors
 - Typecheck web: `npx tsc --noEmit` → 0 errors
 - Web build: `npm run build` → PASSING
@@ -75,6 +75,17 @@
 - [x] `.env.example` + `apps/agents/.env.example` — `AI_GATEWAY_API_KEY` documented
 
 **Verification passed:** agents + web `tsc` 0 errors, `npm run build` OK, both health endpoints report `vercel-ai-gateway` when `AI_GATEWAY_API_KEY` set.
+
+### feat-009: Auction mode — tender broadcast + vendor bidding agents
+- [x] `apps/agents/src/agents/types.ts` — TenderBroadcast, VendorAnchor, VendorBid, AuctionRound, AuctionEvaluation, AuctionOutcome, TravelDetails
+- [x] `apps/agents/src/agents/vendors/flight-vendors.ts` — 5 pre-built profiles: Traveloka, Skyscanner, Trip.com, Scoot, AirAsia (prompt-only policies)
+- [x] `apps/agents/src/agents/vendors/generic-vendor.ts` — Exa+LLM researched bidder profiles for any non-flight category
+- [x] `apps/agents/src/agents/auction.ts` — tender → live Exa price anchors (includeDomains, skip unpriced, abort <2) → 2 bidding rounds (sealed → best & final w/ competitor board) → LLM judge → WinnerPaymentIntent
+- [x] `apps/agents/src/index.ts` — auction branch (501 removed); reuses governance/Stripe/DB; terminal governance event unchanged
+- [x] `apps/web` — AuctionTheatre (tender / bid board / judge / review / recap scenes), useAgentStream AuctionState, Sidebar toggle enabled, procure 501 removed, timeout 180s
+- [x] `test-auction.ts` (33 checks) + `test-auction-e2e.ts` (live Exa + Stripe ACCEPT/BLOCK/override)
+
+**Verification passed:** test:auction 33/33; auction e2e with LIVE fares (Traveloka 74.40 / Skyscanner 84 / Trip.com 96 / AirAsia 77, Scoot skipped); server-level run ACCEPT + Stripe PI + DB row `full_result.mode=auction`; generic catering path with 5 researched bidders; find-mode burger regression unchanged; tsc 0 errors both apps; web build PASSING.
 
 ## Not Started
 - feat-007: AWS infrastructure + deployment (CDK stacks)

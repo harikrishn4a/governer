@@ -5,6 +5,16 @@ export interface UserIntent {
   budget?: number;
   currency?: string;
   constraints?: string[];
+  travel?: TravelDetails;
+}
+
+export interface TravelDetails {
+  origin?: string;
+  destination?: string;
+  departureDate?: string;
+  passengers?: number;
+  cabin?: string;
+  directOnly?: boolean;
 }
 
 export interface PaymentIntent {
@@ -104,6 +114,69 @@ export interface AuditEvent {
   createdAt: string;
 }
 
+// ── Auction mode ─────────────────────────────────────────────────────────────
+
+export interface VendorProfile {
+  slug: string;          // "traveloka" → SSE agent name "bidder_traveloka"
+  name: string;
+  domains: string[];     // Exa includeDomains + discovered-result → vendor matching
+  character: string;     // persona paragraph injected into the bidder system prompt
+  biddingPolicy: string; // prompt-encoded policy text — no code enforcement by design
+  source: "prebuilt" | "researched";
+}
+
+export interface TenderBroadcast {
+  id: string;            // = txId
+  intent: UserIntent;
+  budget?: number;
+  currency: string;
+  category: "flight" | "generic";
+  maxRounds: number;
+}
+
+export interface VendorAnchor {
+  vendorId: string;
+  vendor: string;
+  publishedPrice: number; // real price discovered by Exa — every bid anchors to this
+  currency: string;
+  itemSummary: string;    // e.g. "SIN→KUL direct, 1 adult, 11 Jun"
+  sourceUrl: string;
+}
+
+export interface VendorBid {
+  vendorId: string;
+  vendor: string;
+  round: number;
+  price: number;
+  valueAdds: string[];
+  pitch: string;
+  canImprove: boolean;
+  conditions?: string;    // e.g. AirAsia "promo fare valid only if you commit now"
+  carriedForward?: boolean; // true when this round's LLM call failed and the prior bid was kept
+}
+
+export interface AuctionRound {
+  round: number;
+  kind: "sealed" | "final";
+  bids: VendorBid[];
+}
+
+export interface AuctionEvaluation {
+  ranking: RankingEntry[];
+  verdict: string;
+  winnerVendorId: string;
+}
+
+export interface AuctionOutcome {
+  tender: TenderBroadcast;
+  anchors: VendorAnchor[];
+  skipped: Array<{ vendor: string; reason: string }>;
+  bidders: Array<{ slug: string; name: string; source: "prebuilt" | "researched" }>;
+  rounds: AuctionRound[];
+  evaluation: AuctionEvaluation;
+  winner: WinnerPaymentIntent;
+}
+
 export interface AgentEvent {
   type:
     | "agent:start"
@@ -111,6 +184,11 @@ export interface AgentEvent {
     | "agent:tool_call"
     | "agent:tool_result"
     | "agent:complete"
+    | "auction:anchor"
+    | "auction:round_start"
+    | "auction:bid"
+    | "auction:round_complete"
+    | "bidder:skipped"
     | "error";
   agent: string;
   data: unknown;

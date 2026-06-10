@@ -357,12 +357,15 @@ export default function Sidebar({
           </button>
           <button
             type="button"
-            disabled
-            title="Auction mode — coming soon"
-            className="flex-1 text-label font-medium py-1.5 rounded-full border border-border-subtle text-text-muted opacity-50 cursor-not-allowed flex items-center justify-center gap-1.5"
+            onClick={() => onModeChange("auction")}
+            title="Auction mode — vendors bid for your tender"
+            className={`flex-1 text-label font-medium py-1.5 rounded-full border transition-colors duration-micro ${
+              mode === "auction"
+                ? "bg-accent-blue text-text-inverse border-accent-blue"
+                : "border-border text-text-secondary hover:text-text-primary hover:border-border"
+            }`}
           >
             Auction
-            <span className="text-overline uppercase font-mono text-text-muted">soon</span>
           </button>
         </div>
       </div>

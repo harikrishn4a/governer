@@ -7,7 +7,8 @@ import type { WinnerPaymentIntent, UserIntent, SpendingContract, GovernanceDecis
 type CheckedRule = GovernanceDecision["checkedRules"][number];
 
 async function checkIntentMatch(winner: WinnerPaymentIntent, intent: UserIntent): Promise<CheckedRule> {
-  const prompt = `User asked for: "${intent.raw}"
+  const prompt = `Today's date: ${new Date().toISOString().slice(0, 10)} (use this to resolve relative dates like "tomorrow" — do not rely on any other notion of the current date).
+User asked for: "${intent.raw}"
 Winning item: ${winner.vendor} — ${winner.item} (${winner.description})
 Does this item genuinely match what the user asked for? Answer YES or NO on the first line, then explain briefly.`;
 
