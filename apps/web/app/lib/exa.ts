@@ -1,10 +1,19 @@
 import Exa from "exa-js";
 
-const exa = new Exa(process.env.EXA_API_KEY);
+let exa: Exa | null = null;
+
+function getExa(): Exa | null {
+  const key = process.env.EXA_API_KEY;
+  if (!key) return null;
+  if (!exa) exa = new Exa(key);
+  return exa;
+}
 
 export async function searchReviews(businessName: string): Promise<string> {
+  const client = getExa();
+  if (!client) return "No reviews found.";
   try {
-    const result = await exa.searchAndContents(`${businessName} Singapore restaurant reviews`, {
+    const result = await client.searchAndContents(`${businessName} Singapore restaurant reviews`, {
       numResults: 3,
       text: true,
     });
@@ -104,6 +113,8 @@ export async function fetchFoodpandaMenu(vendorCode: string): Promise<string> {
 }
 
 export async function searchMenu(businessName: string): Promise<string> {
+  const client = getExa();
+  if (!client) return "No menu info found.";
   try {
     // Run multiple targeted searches in parallel to maximize menu coverage
     const queries = [
@@ -114,7 +125,7 @@ export async function searchMenu(businessName: string): Promise<string> {
 
     const allResults = await Promise.all(
       queries.map((q) =>
-        exa.searchAndContents(q, { numResults: 4, text: true, livecrawlTimeout: 15000 })
+        client.searchAndContents(q, { numResults: 4, text: true, livecrawlTimeout: 15000 })
           .then((r) => r.results)
           .catch(() => [])
       )
@@ -149,8 +160,10 @@ export async function searchMenu(businessName: string): Promise<string> {
 
 
 export async function searchSpecificItem(businessName: string, item: string): Promise<string> {
+  const client = getExa();
+  if (!client) return "No results found.";
   try {
-    const result = await exa.searchAndContents(
+    const result = await client.searchAndContents(
       `${businessName} Singapore ${item} review price`,
       { numResults: 3, text: true, livecrawlTimeout: 10000 }
     );
@@ -166,6 +179,8 @@ export async function searchSpecificItem(businessName: string, item: string): Pr
 // Research a vendor that has no registered agent yet. Pulls general web info
 // (about, location, menu, reviews) so we can auto-build a negotiation agent.
 export async function searchSupplierInfo(vendorName: string): Promise<string> {
+  const client = getExa();
+  if (!client) return "";
   try {
     const queries = [
       `${vendorName} restaurant about location address`,
@@ -175,7 +190,7 @@ export async function searchSupplierInfo(vendorName: string): Promise<string> {
 
     const allResults = await Promise.all(
       queries.map((q) =>
-        exa
+        client
           .searchAndContents(q, { numResults: 3, text: true, livecrawlTimeout: 12000 })
           .then((r) => r.results)
           .catch(() => [])

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
@@ -30,18 +31,22 @@ export async function POST(req: NextRequest) {
   const transactionId = randomUUID();
   const agentsUrl = process.env.AGENTS_BASE_URL ?? "http://localhost:4000";
 
-  // Fire-and-forget: the agents /run only responds after the full pipeline, but
-  // we don't await it — events stream back via /api/stream/ingest meanwhile.
-  // (Works on a persistent Node server / local dev; a serverless host would need
-  // waitUntil() to keep the request alive — noted in B1-COMPLETE.md.)
-  fetch(`${agentsUrl}/run`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ txId: transactionId, intent: intent.trim(), contractId: contractId.trim(), mode: mode ?? "find" }),
-    signal: AbortSignal.timeout(120_000),
-  }).catch((err) => {
-    console.error("[procure] agents /run dispatch failed", transactionId, String(err));
-  });
+  // Dispatch agents /run in the background; waitUntil keeps the work alive on Vercel serverless.
+  waitUntil(
+    fetch(`${agentsUrl}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        txId: transactionId,
+        intent: intent.trim(),
+        contractId: contractId.trim(),
+        mode: mode ?? "find",
+      }),
+      signal: AbortSignal.timeout(120_000),
+    }).catch((err) => {
+      console.error("[procure] agents /run dispatch failed", transactionId, String(err));
+    })
+  );
 
   return NextResponse.json({ transactionId });
 }
