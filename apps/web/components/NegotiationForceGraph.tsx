@@ -4,9 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import SpriteText from "three-spritetext";
 
-// This component is loaded client-only (via next/dynamic ssr:false on the page),
-// so the static three / force-graph imports never run on the server.
-
 type NodeState = "buyer" | "candidate" | "relevant" | "pruned" | "winner" | "dim";
 
 interface GNode {
@@ -23,6 +20,12 @@ interface GLink {
   target: string | GNode;
   active: boolean;
 }
+interface ArgCard {
+  id: number;
+  side: "left" | "right";
+  speaker: string;
+  text: string;
+}
 
 export type Stage = "discovery" | "pruning" | "negotiate" | "verdict";
 
@@ -37,12 +40,20 @@ const SUPPLIERS = [
   "Cali Mex",
   "El Patrón",
 ];
-const KEEP = 5; // first 5 survive the relevance filter
+const KEEP = 5;
 const WINNER_ID = "s0";
 
-function endId(v: string | GNode): string {
-  return typeof v === "string" ? v : v.id;
-}
+// The negotiation transcript that drives the side cards (and node activity).
+const ARGUMENTS: { speaker: string; text: string }[] = [
+  { speaker: "Mad Mex", text: "Small Burrito at SGD 8.90 — fully customizable, right at Marina Bay Financial Centre. Best value, full stop." },
+  { speaker: "Buyer Agent", text: "Is “small” really the best, or just the cheapest? Justify the portion size." },
+  { speaker: "Guzman y Gomez", text: "Mini Burrito SGD 9.40 — authentic Mexican, made fresh daily, a short walk from MBS." },
+  { speaker: "Baja Fresh", text: "Baja Burrito SGD 16.32 — made-from-scratch every day, generous fillings. Quality over cost." },
+  { speaker: "Buyer Agent", text: "Two of you undercut on price. What's the real differentiator beyond cost?" },
+  { speaker: "Chimi's", text: "Smoked Duck Burrito SGD 16 — a gourmet twist, with alfresco seating over the bay." },
+  { speaker: "Super Loco", text: "Veggie Burrito SGD 22 — premium, but the freshest produce of anyone here." },
+  { speaker: "Mad Mex", text: "Customisable to any size — base price is just the start. Still the strongest value." },
+];
 
 const COLOR: Record<NodeState, string> = {
   buyer: "#4E6173",
@@ -53,6 +64,10 @@ const COLOR: Record<NodeState, string> = {
   dim: "#D2CCBF",
 };
 
+function endId(v: string | GNode): string {
+  return typeof v === "string" ? v : v.id;
+}
+
 export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage) => void }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
@@ -62,17 +77,11 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
   const linksRef = useRef<GLink[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null);
+  const lockFrameRef = useRef(false); // stop re-framing once negotiation begins (so auto-rotate is smooth)
+  const cardSeq = useRef(0);
   const [graph, setGraph] = useState<{ nodes: GNode[]; links: GLink[] }>({ nodes: [], links: [] });
+  const [cards, setCards] = useState<ArgCard[]>([]);
   const sync = () => setGraph({ nodes: [...nodesRef.current], links: [...linksRef.current] });
-  const fit = () => fgRef.current?.zoomToFit(900, 80);
-
-  // Spread the layout out for a clean ring.
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg) return;
-    fg.d3Force("charge")?.strength(-360);
-    fg.d3Force("link")?.distance(115);
-  }, []);
 
   // responsive width
   useEffect(() => {
@@ -82,15 +91,30 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
     return () => ro.disconnect();
   }, []);
 
+  // forces + camera auto-rotate
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.d3Force("charge")?.strength(-360);
+    fg.d3Force("link")?.distance(115);
+    const c = fg.controls?.();
+    if (c) {
+      c.autoRotate = true;
+      c.autoRotateSpeed = 1.1;
+    }
+  }, [width]);
+
   // lifecycle: discovery -> pruning -> negotiate -> verdict -> (loop)
   useEffect(() => {
     const t: ReturnType<typeof setTimeout>[] = [];
+    lockFrameRef.current = false;
     nodesRef.current = [{ id: "buyer", name: "Buyer Agent", kind: "buyer", state: "buyer", fx: 0, fy: 0, fz: 0 }];
     linksRef.current = [];
+    setCards([]);
     sync();
     onStage?.("discovery");
 
-    // spawn candidates one by one (Exa surfacing options)
+    // spawn candidates (Exa surfacing options)
     SUPPLIERS.forEach((name, i) => {
       t.push(
         setTimeout(() => {
@@ -102,18 +126,15 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
     });
 
     const afterSpawn = 430 * SUPPLIERS.length + 650;
-    // promote survivors to "relevant"
     t.push(
       setTimeout(() => {
         nodesRef.current.forEach((n) => {
           if (n.kind === "supplier" && Number(n.id.slice(1)) < KEEP) n.state = "relevant";
         });
         sync();
-        fit();
         onStage?.("pruning");
       }, afterSpawn)
     );
-    // prune irrelevant: flash, then drop
     for (let k = KEEP; k < SUPPLIERS.length; k++) {
       const at = afterSpawn + 300 + (k - KEEP) * 520;
       t.push(setTimeout(() => { const n = nodesRef.current.find((x) => x.id === `s${k}`); if (n) n.state = "pruned"; sync(); }, at));
@@ -126,18 +147,26 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
       );
     }
 
-    const afterPrune = afterSpawn + 300 + (SUPPLIERS.length - KEEP) * 520 + 700;
-    // negotiation: info streams into the buyer node
+    const afterPrune = afterSpawn + 300 + (SUPPLIERS.length - KEEP) * 520 + 800;
+    // negotiation: all info streams to the buyer + arguments pop onto the side stacks
     t.push(
       setTimeout(() => {
+        lockFrameRef.current = true; // freeze framing so auto-rotate is uninterrupted
         linksRef.current.forEach((l) => (l.active = true));
         sync();
-        fit();
         onStage?.("negotiate");
       }, afterPrune)
     );
+    ARGUMENTS.forEach((a, i) => {
+      t.push(
+        setTimeout(() => {
+          const side = a.speaker === "Buyer Agent" ? "left" : "right";
+          setCards((prev) => [...prev, { id: cardSeq.current++, side, speaker: a.speaker, text: a.text }]);
+        }, afterPrune + 400 + i * 1900)
+      );
+    });
 
-    const verdictAt = afterPrune + 7200;
+    const verdictAt = afterPrune + 400 + ARGUMENTS.length * 1900 + 600;
     t.push(
       setTimeout(() => {
         nodesRef.current.forEach((n) => {
@@ -145,26 +174,31 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
         });
         linksRef.current.forEach((l) => (l.active = endId(l.source) === WINNER_ID));
         sync();
-        fit();
         onStage?.("verdict");
       }, verdictAt)
     );
 
-    // loop
-    t.push(setTimeout(() => setRunId((r) => r + 1), verdictAt + 5600));
+    t.push(setTimeout(() => setRunId((r) => r + 1), verdictAt + 6000));
     return () => t.forEach(clearTimeout);
   }, [runId, onStage]);
 
+  const leftCards = cards.filter((c) => c.side === "left").slice(-4);
+  const rightCards = cards.filter((c) => c.side === "right").slice(-4);
+
   return (
-    <div ref={wrapRef} className="overflow-hidden rounded-2xl border border-border bg-[#F6F4EF] shadow-sm">
+    <div ref={wrapRef} className="relative overflow-hidden rounded-2xl border border-border bg-[#F6F4EF] shadow-sm">
       <ForceGraph3D
+        ref={fgRef}
         graphData={graph}
         width={width}
-        height={540}
+        height={560}
         backgroundColor="#F6F4EF"
         showNavInfo={false}
+        controlType="orbit"
         cooldownTicks={80}
-        onEngineStop={() => fgRef.current?.zoomToFit?.(600, 60)}
+        onEngineStop={() => {
+          if (!lockFrameRef.current) fgRef.current?.zoomToFit?.(600, 60);
+        }}
         nodeRelSize={6}
         nodeResolution={22}
         nodeOpacity={0.96}
@@ -193,6 +227,44 @@ export default function NegotiationForceGraph({ onStage }: { onStage?: (s: Stage
         linkDirectionalParticleSpeed={0.012}
         enableNodeDrag
       />
+
+      {/* layered argument cards — buyer on the left, vendors on the right */}
+      <CardStack cards={leftCards} side="left" />
+      <CardStack cards={rightCards} side="right" />
+    </div>
+  );
+}
+
+function CardStack({ cards, side }: { cards: ArgCard[]; side: "left" | "right" }) {
+  return (
+    <div
+      className={`pointer-events-none absolute top-1/2 w-[300px] -translate-y-1/2 ${side === "left" ? "left-5" : "right-5"}`}
+    >
+      <div className="relative h-[150px]">
+        {cards.map((c, i) => {
+          const depth = cards.length - 1 - i; // 0 = front/newest
+          const buyer = c.side === "left";
+          return (
+            <div
+              key={c.id}
+              className={`absolute left-0 right-0 rounded-xl border p-3.5 shadow-md transition-all duration-300 ${
+                buyer ? "border-accent-purple-subtle bg-[#eef0f3]" : "border-border bg-surface"
+              } ${depth === 0 ? "tk-cardin" : ""}`}
+              style={{
+                transform: `translateY(${depth * 14}px) scale(${1 - depth * 0.05})`,
+                opacity: 1 - depth * 0.26,
+                zIndex: 50 - depth,
+              }}
+            >
+              <p className={`mb-1 text-[0.66rem] font-semibold uppercase tracking-wide ${buyer ? "text-accent-purple" : "text-accent-blue"}`}>
+                {buyer ? "🛡 " : "🍽 "}
+                {c.speaker}
+              </p>
+              <p className="text-[0.82rem] leading-snug text-text-secondary">{c.text}</p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
