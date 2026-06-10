@@ -72,6 +72,29 @@ export interface WinnerPaymentIntent extends PaymentIntent {
   ranking?: RankingEntry[];
 }
 
+export interface FlexibilityRules {
+  price: {
+    hardCap: boolean;
+    overspendTolerancePct: number;
+  };
+  vendor: {
+    strictAllowlist: boolean;
+    blockUnverified: boolean;
+  };
+  intent: {
+    strictMatch: boolean;
+    allowUpgrades: boolean;
+  };
+  custom: string[];
+}
+
+export const DEFAULT_FLEXIBILITY_RULES: FlexibilityRules = {
+  price: { hardCap: false, overspendTolerancePct: 10 },
+  vendor: { strictAllowlist: false, blockUnverified: true },
+  intent: { strictMatch: false, allowUpgrades: true },
+  custom: [],
+};
+
 export interface SpendingContract {
   id: string;
   name: string;
@@ -81,6 +104,7 @@ export interface SpendingContract {
   vendorBlocklist: string[];
   vendorAllowlist: string[];
   riskThreshold: "low" | "medium" | "strict";
+  flexibilityRules?: FlexibilityRules;
   active: boolean;
   createdAt: string;
 }

@@ -2,7 +2,8 @@ import { llmCall } from "../lib/llm";
 import { logger } from "../lib/logger";
 import { getContractSpend } from "../tools/db";
 import { executeAcceptedTransaction, executeBlockedTransaction } from "../tools/stripe";
-import type { WinnerPaymentIntent, UserIntent, SpendingContract, GovernanceDecision } from "./types";
+import type { WinnerPaymentIntent, UserIntent, SpendingContract, GovernanceDecision, FlexibilityRules } from "./types";
+import { DEFAULT_FLEXIBILITY_RULES } from "./types";
 
 type CheckedRule = GovernanceDecision["checkedRules"][number];
 
@@ -28,28 +29,47 @@ async function checkBudget(
   winner: WinnerPaymentIntent,
   contract: SpendingContract
 ): Promise<CheckedRule> {
+  const rules = contract.flexibilityRules ?? DEFAULT_FLEXIBILITY_RULES;
   let rule: CheckedRule;
 
   if (contract.budgetPeriod === "per_transaction") {
-    const passed = winner.price <= contract.budgetCap;
-    rule = {
-      rule: "BUDGET_CAP",
-      passed,
-      detail: passed
-        ? `SGD ${winner.price} ≤ cap SGD ${contract.budgetCap} (per_transaction)`
-        : `SGD ${winner.price} exceeds cap SGD ${contract.budgetCap} (per_transaction)`,
-    };
+    const hardCap = rules.price.hardCap;
+    const tolerance = rules.price.overspendTolerancePct / 100;
+    const ceiling = contract.budgetCap * (1 + tolerance);
+    const passed = winner.price <= ceiling;
+
+    let detail = "";
+    if (winner.price <= contract.budgetCap) {
+      detail = `SGD ${winner.price} ≤ cap SGD ${contract.budgetCap} (per_transaction)`;
+    } else if (!hardCap && winner.price <= ceiling) {
+      const overage = ((winner.price - contract.budgetCap) / contract.budgetCap * 100).toFixed(1);
+      detail = `SGD ${winner.price} is ${overage}% over cap SGD ${contract.budgetCap}, within your ${rules.price.overspendTolerancePct}% tolerance`;
+    } else {
+      const overage = ((winner.price - contract.budgetCap) / contract.budgetCap * 100).toFixed(1);
+      detail = `SGD ${winner.price} is ${overage}% over cap SGD ${contract.budgetCap}${hardCap ? " (hard cap enforced)" : ""}`;
+    }
+
+    rule = { rule: "BUDGET_CAP", passed, detail };
   } else {
     const periodSpend = await getContractSpend(contract.id, contract.budgetPeriod);
+    const hardCap = rules.price.hardCap;
+    const tolerance = rules.price.overspendTolerancePct / 100;
+    const ceiling = contract.budgetCap * (1 + tolerance);
     const total = periodSpend + winner.price;
-    const passed = total <= contract.budgetCap;
-    rule = {
-      rule: "BUDGET_CAP",
-      passed,
-      detail: passed
-        ? `Period spend SGD ${periodSpend.toFixed(2)} + SGD ${winner.price} = SGD ${total.toFixed(2)} ≤ cap SGD ${contract.budgetCap} (${contract.budgetPeriod})`
-        : `Period spend SGD ${periodSpend.toFixed(2)} + SGD ${winner.price} = SGD ${total.toFixed(2)} exceeds cap SGD ${contract.budgetCap} (${contract.budgetPeriod})`,
-    };
+    const passed = total <= ceiling;
+
+    let detail = "";
+    if (total <= contract.budgetCap) {
+      detail = `Period spend SGD ${periodSpend.toFixed(2)} + SGD ${winner.price} = SGD ${total.toFixed(2)} ≤ cap SGD ${contract.budgetCap} (${contract.budgetPeriod})`;
+    } else if (!hardCap && total <= ceiling) {
+      const overage = ((total - contract.budgetCap) / contract.budgetCap * 100).toFixed(1);
+      detail = `Period total SGD ${total.toFixed(2)} is ${overage}% over cap SGD ${contract.budgetCap}, within your ${rules.price.overspendTolerancePct}% tolerance`;
+    } else {
+      const overage = ((total - contract.budgetCap) / contract.budgetCap * 100).toFixed(1);
+      detail = `Period total SGD ${total.toFixed(2)} is ${overage}% over cap SGD ${contract.budgetCap}${hardCap ? " (hard cap enforced)" : ""}`;
+    }
+
+    rule = { rule: "BUDGET_CAP", passed, detail };
   }
 
   logger.info("governance:rule-check", { rule: rule.rule, passed: rule.passed, detail: rule.detail });
@@ -85,49 +105,96 @@ async function checkCategoryConstraints(
   );
 }
 
-function checkVendorBlocklist(winner: WinnerPaymentIntent, blocklist: string[]): CheckedRule {
+function checkVendorBlocklist(winner: WinnerPaymentIntent, contract: SpendingContract): CheckedRule {
+  const rules = contract.flexibilityRules ?? DEFAULT_FLEXIBILITY_RULES;
   const vendorLower = winner.vendor.toLowerCase();
-  const blocked = blocklist.some((b) => vendorLower.includes(b.toLowerCase()));
-  const rule: CheckedRule = {
-    rule: "VENDOR_BLOCKLIST",
-    passed: !blocked,
-    detail: blocked
+  const blocklist = contract.vendorBlocklist;
+  const allowlist = contract.vendorAllowlist;
+
+  let passed = true;
+  let detail = "";
+
+  if (rules.vendor.strictAllowlist && allowlist.length > 0) {
+    const inAllowlist = allowlist.some((a) => vendorLower.includes(a.toLowerCase()));
+    passed = inAllowlist;
+    detail = inAllowlist
+      ? `Vendor "${winner.vendor}" is in your allowlist`
+      : `Vendor "${winner.vendor}" is not in your allowlist (strict mode)`;
+  } else {
+    const blocked = blocklist.some((b) => vendorLower.includes(b.toLowerCase()));
+    passed = !blocked;
+    detail = blocked
       ? `Vendor "${winner.vendor}" matches blocklist entry`
-      : `Vendor "${winner.vendor}" not in blocklist (${blocklist.length} entries checked)`,
-  };
+      : `Vendor "${winner.vendor}" not in blocklist (${blocklist.length} entries checked)`;
+  }
+
+  const rule: CheckedRule = { rule: "VENDOR_BLOCKLIST", passed, detail };
   logger.info("governance:rule-check", { rule: rule.rule, passed: rule.passed, detail: rule.detail });
   return rule;
 }
 
-async function checkVendorLegitimacy(winner: WinnerPaymentIntent): Promise<CheckedRule> {
+async function checkVendorLegitimacy(winner: WinnerPaymentIntent, contract: SpendingContract): Promise<CheckedRule> {
+  const rules = contract.flexibilityRules ?? DEFAULT_FLEXIBILITY_RULES;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(winner.order_url, { method: "HEAD", signal: controller.signal });
     clearTimeout(timeout);
-    const passed = res.status < 400;
+    const isValid = res.status < 400;
+
     const rule: CheckedRule = {
       rule: "VENDOR_LEGITIMACY",
-      passed: true, // warning only — never a hard block
-      detail: passed
+      passed: rules.vendor.blockUnverified ? isValid : true,
+      detail: isValid
         ? `URL ${winner.order_url} returned HTTP ${res.status}`
-        : `URL ${winner.order_url} returned HTTP ${res.status} — flagged as suspicious`,
+        : rules.vendor.blockUnverified
+          ? `URL ${winner.order_url} returned HTTP ${res.status} — blocked (unverified vendor)`
+          : `URL ${winner.order_url} returned HTTP ${res.status} — flagged as suspicious (warning only)`,
     };
     logger.info("governance:rule-check", { rule: rule.rule, passed: rule.passed, detail: rule.detail });
     return rule;
   } catch (err) {
-    logger.warn("governance:legitimacy-check — URL unreachable (warning only)", {
+    logger.warn("governance:legitimacy-check", {
       url: winner.order_url,
+      blockUnverified: rules.vendor.blockUnverified,
       error: String(err).slice(0, 120),
     });
     const rule: CheckedRule = {
       rule: "VENDOR_LEGITIMACY",
-      passed: true,
-      detail: `URL check failed for ${winner.order_url} — flagged for review (not a hard block)`,
+      passed: !rules.vendor.blockUnverified,
+      detail: `URL check failed for ${winner.order_url}${rules.vendor.blockUnverified ? " — blocked (unverified)" : " — flagged for review (warning only)"}`,
     };
     logger.info("governance:rule-check", { rule: rule.rule, passed: rule.passed, detail: rule.detail });
     return rule;
   }
+}
+
+async function checkCustomRules(winner: WinnerPaymentIntent, customRules: string[]): Promise<CheckedRule[]> {
+  if (customRules.length === 0) return [];
+
+  return Promise.all(
+    customRules.map(async (rule) => {
+      const reply = await llmCall({
+        system: "You are a procurement compliance auditor. Answer YES if the transaction satisfies the rule, NO if it does not. Answer only YES or NO on the first line.",
+        messages: [
+          {
+            role: "user",
+            content: `Rule: "${rule}"\nTransaction: ${winner.vendor} selling ${winner.item} at SGD ${winner.price} (${winner.description}).\nDoes this transaction satisfy the rule?`,
+          },
+        ],
+        maxTokens: 200,
+      });
+
+      const passed = reply.trim().toUpperCase().startsWith("YES");
+      const checkedRule: CheckedRule = {
+        rule: `CUSTOM_RULE: ${rule}`,
+        passed,
+        detail: reply.trim().slice(0, 300),
+      };
+      logger.info("governance:rule-check", { rule: checkedRule.rule, passed: checkedRule.passed, detail: checkedRule.detail.slice(0, 120) });
+      return checkedRule;
+    })
+  );
 }
 
 export async function runGovernance(
@@ -167,12 +234,21 @@ export async function runGovernance(
   }
 
   logger.info("governance:checking — RULE 4: VENDOR_BLOCKLIST");
-  const blocklistRule = checkVendorBlocklist(winner, contract.vendorBlocklist);
+  const blocklistRule = checkVendorBlocklist(winner, contract);
   checkedRules.push(blocklistRule);
 
-  logger.info("governance:checking — RULE 5: VENDOR_LEGITIMACY (warning-only)");
-  const legitimacyRule = await checkVendorLegitimacy(winner);
+  logger.info("governance:checking — RULE 5: VENDOR_LEGITIMACY");
+  const legitimacyRule = await checkVendorLegitimacy(winner, contract);
   checkedRules.push(legitimacyRule);
+
+  const flexibilityRules = contract.flexibilityRules ?? DEFAULT_FLEXIBILITY_RULES;
+  if (flexibilityRules.custom.length > 0) {
+    logger.info("governance:checking — RULE 6: CUSTOM_RULES", {
+      count: flexibilityRules.custom.length,
+    });
+    const customRules = await checkCustomRules(winner, flexibilityRules.custom);
+    checkedRules.push(...customRules);
+  }
 
   const failedRules = checkedRules.filter((r) => !r.passed);
   const decision: "ACCEPT" | "BLOCK" = failedRules.length === 0 ? "ACCEPT" : "BLOCK";

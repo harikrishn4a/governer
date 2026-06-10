@@ -17,6 +17,18 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // Validate flexibilityRules structure if present
+    if (body.flexibility_rules) {
+      const rules = body.flexibility_rules;
+      if (!rules.price || !rules.vendor || !rules.intent || !Array.isArray(rules.custom)) {
+        return NextResponse.json(
+          { error: "flexibilityRules must include price, vendor, intent, and custom fields" },
+          { status: 400 }
+        );
+      }
+    }
+
     const contract = await createContract(body);
     return NextResponse.json(contract, { status: 201 });
   } catch (err: unknown) {

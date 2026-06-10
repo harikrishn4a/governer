@@ -55,8 +55,8 @@ export async function createContract(data: Record<string, unknown>) {
   const pool = await getPool();
   const { rows } = await pool.query(
     `INSERT INTO spending_contracts
-      (name, budget_cap, budget_period, category_constraints, vendor_blocklist, vendor_allowlist, risk_threshold, active)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      (name, budget_cap, budget_period, category_constraints, vendor_blocklist, vendor_allowlist, risk_threshold, flexibility_rules, active)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
     [
       data.name,
       data.budget_cap,
@@ -65,6 +65,7 @@ export async function createContract(data: Record<string, unknown>) {
       data.vendor_blocklist ?? [],
       data.vendor_allowlist ?? [],
       data.risk_threshold ?? "medium",
+      data.flexibility_rules ? JSON.stringify(data.flexibility_rules) : null,
       data.active ?? true,
     ]
   );
@@ -78,7 +79,11 @@ export async function updateContract(id: string, data: Record<string, unknown>) 
   let i = 1;
   for (const [key, val] of Object.entries(data)) {
     fields.push(`${key} = $${i++}`);
-    values.push(val);
+    if (key === "flexibility_rules" && val && typeof val === "object") {
+      values.push(JSON.stringify(val));
+    } else {
+      values.push(val);
+    }
   }
   values.push(id);
   const { rows } = await pool.query(
