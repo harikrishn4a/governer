@@ -456,13 +456,10 @@ export default function Sidebar({
 
   return (
     <aside className="flex flex-col w-72 shrink-0 self-stretch border-r border-border bg-surface">
-      {/* Wordmark + version */}
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-border-subtle">
+      {/* Wordmark */}
+      <div className="px-4 py-4 border-b border-border-subtle">
         <span className="font-display text-display-md font-extrabold tracking-tight text-text-primary">
           AgentBid
-        </span>
-        <span className="text-overline uppercase font-mono text-text-muted border border-border-subtle rounded px-1.5 py-0.5">
-          v0.1
         </span>
       </div>
 
