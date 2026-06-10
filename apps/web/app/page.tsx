@@ -206,7 +206,7 @@ export default function ProcurePage() {
           </div>
         ) : (
           /* ── Active run ─────────────────────────────────────────────── */
-          <div className="mx-auto max-w-5xl px-6 py-8">
+          <div className="mx-auto max-w-6xl px-6 py-8">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-muted">
@@ -320,6 +320,7 @@ function VerdictBar({
 }) {
   const accepted = result.decision === "ACCEPT";
   const settled = accepted || overrideSuccess;
+  const failedRule = result.checkedRules?.find((r) => !r.passed);
 
   return (
     <div
@@ -327,46 +328,57 @@ function VerdictBar({
         settled ? "border-accept-border bg-accept-subtle" : "border-review-border bg-review-subtle"
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <span
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-text-inverse ${
-              settled ? "bg-accept" : "bg-review"
-            }`}
-          >
-            {settled ? "✓ Payment settled" : "⏸ Held for review"}
-          </span>
-          <p className="font-serif mt-3 text-[1.5rem] font-semibold leading-tight text-text-primary">
-            {result.vendor}
-          </p>
-          <p className="mt-0.5 text-[0.92rem] text-text-secondary">
-            {result.item} · <span className="font-mono">SGD {Number(result.price).toFixed(2)}</span>
-            {result.contractName && <> · {result.contractName}</>}
-          </p>
-          <p className="mt-3 max-w-2xl text-[0.9rem] leading-relaxed text-text-secondary">
-            {result.rationale}
-          </p>
-          {result.stripePaymentIntentId && (
-            <p className="mt-3 font-mono text-[0.76rem] text-text-muted">
-              Stripe · {result.stripePaymentIntentId}
-            </p>
-          )}
-        </div>
-
-        {!accepted && !overrideSuccess && (
-          <button
-            onClick={onRequestReview}
-            className="shrink-0 rounded-lg bg-review px-5 py-2.5 text-[0.88rem] font-medium text-text-inverse transition hover:brightness-105"
-          >
-            Review & override
-          </button>
-        )}
-        {overrideSuccess && (
-          <span className="shrink-0 self-center rounded-lg border border-accept-border bg-accept-subtle px-4 py-2 text-[0.85rem] font-medium text-accept-text">
-            ✓ Overridden & executed
+      {/* status row */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span
+          className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-text-inverse ${
+            settled ? "bg-accept" : "bg-review"
+          }`}
+        >
+          {accepted ? "✓ Approved & paid" : overrideSuccess ? "✓ Overridden & paid" : "⏸ Held for review"}
+        </span>
+        {result.stripePaymentIntentId && (
+          <span className="font-mono text-[0.76rem] text-text-muted">
+            Stripe · {result.stripePaymentIntentId}
           </span>
         )}
       </div>
+
+      {/* winner */}
+      <p className="font-serif mt-4 text-[1.5rem] font-semibold leading-tight text-text-primary">
+        {result.vendor}
+      </p>
+      <p className="mt-0.5 text-[0.92rem] text-text-secondary">
+        {result.item} · <span className="font-mono">SGD {Number(result.price).toFixed(2)}</span>
+        {result.contractName && <> · {result.contractName}</>}
+      </p>
+
+      {/* ONE clear status line — no contradictory blocked wall once it's resolved */}
+      {accepted && (
+        <p className="mt-3 text-[0.9rem] text-accept-text">
+          All governance checks passed — payment captured automatically.
+        </p>
+      )}
+      {!accepted && overrideSuccess && (
+        <p className="mt-3 text-[0.9rem] text-accept-text">
+          You approved the governance hold — payment captured via Stripe.
+        </p>
+      )}
+      {!accepted && !overrideSuccess && (
+        <>
+          <p className="mt-3 max-w-2xl text-[0.9rem] leading-relaxed text-text-secondary">
+            Held by governance — failed{" "}
+            <span className="font-medium text-review-text">{failedRule?.rule ?? "a rule"}</span>. Review the
+            transcript and audit above, then release the payment if you still want it.
+          </p>
+          <button
+            onClick={onRequestReview}
+            className="mt-5 rounded-lg bg-review px-5 py-2.5 text-[0.88rem] font-medium text-text-inverse transition hover:brightness-105"
+          >
+            Review &amp; override →
+          </button>
+        </>
+      )}
     </div>
   );
 }

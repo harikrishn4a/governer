@@ -227,6 +227,50 @@ body {
 /* Score / fill bar grow. */
 .tk-bar { transition: width 900ms var(--ease-out-expo); }
 
+/* Node recoil — a vendor "flinching" when the buyer agent challenges it. */
+.tk-shake { animation: tk-shake 0.5s var(--ease-in-out) infinite; }
+@keyframes tk-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2.5px); }
+  75% { transform: translateX(2.5px); }
+}
+
+/* Node soft glow pulse (active speaker). */
+.tk-nodeglow { animation: tk-nodeglow 1.4s var(--ease-in-out) infinite; }
+@keyframes tk-nodeglow { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.4; } }
+
+/* Round caption cross-fade. */
+.tk-fade { animation: tk-fade 400ms var(--ease-out-expo); }
+@keyframes tk-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Gentle continuous float — keeps the graph alive between rounds.
+ * Pure translate so it composes safely on SVG <g>; vary delay per node. */
+.tk-float { animation: tk-float 5.5s var(--ease-in-out) infinite; }
+@keyframes tk-float {
+  0%, 100% { transform: translate(0, 0); }
+  33%  { transform: translate(3px, -5px); }
+  66%  { transform: translate(-3px, 4px); }
+}
+
+/* Winner "claim" — a one-shot grow that holds. */
+.tk-claim { animation: tk-claim 700ms var(--ease-out-expo) both; transform-box: fill-box; transform-origin: center; }
+@keyframes tk-claim {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Slow rotating energy halo behind the buyer node. */
+.tk-spin { animation: tk-spin 14s linear infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes tk-spin { to { transform: rotate(360deg); } }
+
+/* Argument card popping onto the stack. */
+.tk-cardin { animation: tk-cardin 420ms var(--ease-out-expo) both; }
+@keyframes tk-cardin {
+  from { opacity: 0; transform: translateY(26px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* The vertical pipeline connector fill. */
 .tk-railfill { transition: height 700ms var(--ease-in-out); }
 

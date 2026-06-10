@@ -31,6 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <a href="/user" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
             Negotiate
           </a>
+          <a href="/nodes" className="text-[0.85rem] text-text-secondary transition-colors hover:text-text-primary">
+            Live demo
+          </a>
         </nav>
         <main>{children}</main>
       </body>

@@ -37,6 +37,16 @@ function pill(active: boolean) {
   }`;
 }
 
+interface DraftItem {
+  id: number;
+  name: string;
+  price?: number;
+  description: string;
+  tags: string[];
+  needsInfo: boolean;
+  question: string;
+}
+
 export default function BusinessPortal() {
   const [businessId] = useState(() => crypto.randomUUID());
   const [businessName, setBusinessName] = useState("");
@@ -49,6 +59,13 @@ export default function BusinessPortal() {
   const [menuSaved, setMenuSaved] = useState(false);
   const [persona, setPersona] = useState<Persona>(EMPTY_PERSONA);
   const [personaSaved, setPersonaSaved] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importSource, setImportSource] = useState("");
+  const [items, setItems] = useState<DraftItem[]>([]);
+  const [catalogSaving, setCatalogSaving] = useState(false);
+  const [catalogSaved, setCatalogSaved] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,6 +134,65 @@ export default function BusinessPortal() {
     setMenuSaved(true);
   }
 
+  async function runImport() {
+    if (!importUrl.trim()) return;
+    setImporting(true);
+    setImportError("");
+    setCatalogSaved(false);
+    try {
+      const res = await fetch("/api/business/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: importUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportError(data.error || "Import failed.");
+        setItems([]);
+      } else {
+        setItems(data.items as DraftItem[]);
+        setImportSource(data.source);
+      }
+    } catch {
+      setImportError("Import failed — check the link and try again.");
+    }
+    setImporting(false);
+  }
+
+  function updateItem<K extends keyof DraftItem>(id: number, field: K, value: DraftItem[K]) {
+    setCatalogSaved(false);
+    setItems((its) =>
+      its.map((it) => {
+        if (it.id !== id) return it;
+        const next = { ...it, [field]: value };
+        if (field === "description") next.needsInfo = false; // owner addressed it
+        return next;
+      })
+    );
+  }
+
+  function removeItem(id: number) {
+    setItems((its) => its.filter((it) => it.id !== id));
+  }
+
+  async function saveCatalog() {
+    if (items.length === 0) return;
+    setCatalogSaving(true);
+    const payload = items.map(({ name, price, description, tags }) => ({ name, price, description, tags }));
+    const res = await fetch("/api/business/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ businessId, businessName, items: payload }),
+    });
+    if (res.ok) {
+      setCatalogSaved(true);
+      setIsReady(true);
+    }
+    setCatalogSaving(false);
+  }
+
+  const flagged = items.filter((i) => i.needsInfo).length;
+
   // ── Start screen ──────────────────────────────────────────────────────────
   if (!started) {
     return (
@@ -129,12 +205,12 @@ export default function BusinessPortal() {
             Teach your AI agent.
           </h1>
           <p className="mt-3 text-[0.95rem] leading-relaxed text-text-secondary">
-            Enter your restaurant name to begin. Upload a menu or chat to teach the AI
-            how to represent you in negotiations.
+            Enter your business name to begin. Import your existing Shopify or foodpanda
+            catalog, upload a file, or chat — to teach the AI how to represent you.
           </p>
           <input
             className="mt-5 w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[0.95rem] text-text-primary outline-none transition-colors focus:border-accent-blue"
-            placeholder="Restaurant name…"
+            placeholder="Business name…"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && businessName.trim() && setStarted(true)}
@@ -167,6 +243,111 @@ export default function BusinessPortal() {
       </header>
 
       <div className="mx-auto w-full max-w-3xl flex-1 px-6">
+        {/* Import existing catalog */}
+        <div className="mt-4 rounded-xl border border-border bg-surface p-4 shadow-sm">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent-blue">Quick start</p>
+          <h2 className="font-serif mt-1 text-[1.3rem] font-semibold text-text-primary">Import your existing catalog</h2>
+          <p className="mt-1 text-[0.88rem] leading-relaxed text-text-secondary">
+            Already listed somewhere? Paste your <span className="font-medium text-text-primary">Shopify store</span> or{" "}
+            <span className="font-medium text-text-primary">foodpanda</span> link — we&apos;ll pull your items so you can review &amp; edit
+            instead of typing them all in.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <input
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-[0.9rem] text-text-primary outline-none focus:border-accent-blue"
+              placeholder="https://yourshop.com  ·  or a foodpanda restaurant link"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !importing && runImport()}
+              disabled={importing}
+            />
+            <button
+              onClick={runImport}
+              disabled={importing || !importUrl.trim()}
+              className="rounded-lg bg-accent-blue px-5 py-2 text-[0.88rem] font-medium text-text-inverse transition hover:bg-accent-blue-hover disabled:opacity-50"
+            >
+              {importing ? "Importing…" : "Import"}
+            </button>
+          </div>
+          {importError && <p className="mt-2 text-[0.84rem] text-block-text">{importError}</p>}
+          {importSource && items.length > 0 && (
+            <p className="mt-2 text-[0.82rem] text-text-muted">
+              Pulled {items.length} items from {importSource}. Review them below
+              {flagged > 0 && <> — <span className="font-medium text-review-text">{flagged}</span> need a little more detail</>}.
+            </p>
+          )}
+        </div>
+
+        {/* Editable catalog */}
+        {items.length > 0 && (
+          <div className="mt-4 rounded-xl border border-border bg-surface p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-serif text-[1.15rem] font-semibold text-text-primary">Your catalog ({items.length})</h3>
+              <button
+                onClick={saveCatalog}
+                disabled={catalogSaving}
+                className="rounded-lg bg-accent-blue px-4 py-2 text-[0.85rem] font-medium text-text-inverse transition hover:bg-accent-blue-hover disabled:opacity-50"
+              >
+                {catalogSaved ? "✓ Saved & live" : catalogSaving ? "Saving…" : "Save catalog & go live"}
+              </button>
+            </div>
+            <p className="mt-1 text-[0.8rem] text-text-muted">
+              Items the AI flagged are <span className="font-medium text-review-text">highlighted</span> — add the missing detail and the flag clears.
+            </p>
+            <div className="scroll-custom mt-3 max-h-[480px] space-y-2.5 overflow-y-auto pr-1">
+              {items.map((it) => (
+                <div
+                  key={it.id}
+                  className={`rounded-lg border p-3 ${it.needsInfo ? "border-review-border bg-review-subtle" : "border-border-subtle bg-surface"}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={it.name}
+                      onChange={(e) => updateItem(it.id, "name", e.target.value)}
+                      className="flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-[0.9rem] font-medium text-text-primary outline-none focus:border-accent-blue"
+                    />
+                    <div className="flex items-center rounded-md border border-border bg-surface px-2">
+                      <span className="text-[0.78rem] text-text-muted">$</span>
+                      <input
+                        type="number"
+                        value={it.price ?? ""}
+                        onChange={(e) => updateItem(it.id, "price", e.target.value === "" ? undefined : parseFloat(e.target.value))}
+                        className="w-16 bg-transparent py-1.5 text-[0.85rem] text-text-primary outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={() => removeItem(it.id)}
+                      title="Remove"
+                      className="rounded-md border border-border px-2 py-1.5 text-[0.85rem] text-text-muted hover:border-block-border hover:text-block-text"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <textarea
+                    value={it.description}
+                    onChange={(e) => updateItem(it.id, "description", e.target.value)}
+                    rows={2}
+                    placeholder="Description — the ingredients / specs buyers ask about"
+                    className="mt-2 w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-[0.84rem] leading-snug text-text-secondary outline-none focus:border-accent-blue"
+                  />
+                  {it.tags.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {it.tags.map((t, ti) => (
+                        <span key={ti} className="rounded-full border border-border-subtle bg-surface-raised/50 px-2 py-0.5 text-[0.72rem] text-text-muted">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {it.needsInfo && it.question && (
+                    <p className="mt-2 text-[0.8rem] font-medium text-review-text">💬 {it.question}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* foodpanda link */}
         {isReady && !menuSaved && (
           <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-surface p-3 shadow-sm">
