@@ -1,5 +1,6 @@
 .env
 node_modules/
+apps/agents/dist/
 # Next.js
 apps/web/.next/
 apps/web/.env.local

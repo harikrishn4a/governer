@@ -1,3 +1,4 @@
+import { generateText } from "ai";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { logger } from "./logger";
@@ -12,13 +13,48 @@ if (process.env.OPENAI_API_KEY) {
   openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-function defaultModel(): string {
+function gatewayApiKey(): string | undefined {
+  return process.env.AI_GATEWAY_API_KEY ?? process.env.VERCEL_OIDC_TOKEN;
+}
+
+/** True when LLM calls route through Vercel AI Gateway (preferred). */
+export function isGatewayEnabled(): boolean {
+  return Boolean(gatewayApiKey());
+}
+
+function directAnthropicAvailable(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
+function directOpenaiAvailable(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+export function isLlmConfigured(): boolean {
+  return isGatewayEnabled() || directAnthropicAvailable() || directOpenaiAvailable();
+}
+
+export function llmRoute(): "vercel-ai-gateway" | "direct" {
+  return isGatewayEnabled() ? "vercel-ai-gateway" : "direct";
+}
+
+export function defaultModel(): string {
+  if (process.env.LLM_DEFAULT_MODEL) return process.env.LLM_DEFAULT_MODEL;
   if (process.env.ANTHROPIC_MODEL) return process.env.ANTHROPIC_MODEL;
-  if (process.env.ANTHROPIC_API_KEY) return "claude-sonnet-4-5";
-  if (process.env.OPENAI_API_KEY) return "gpt-4o";
+  if (isGatewayEnabled() || directAnthropicAvailable()) return "claude-sonnet-4-5";
+  if (directOpenaiAvailable()) return "gpt-4o";
   throw new Error(
-    "No LLM key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env"
+    "No LLM configured. Set AI_GATEWAY_API_KEY (Vercel AI Gateway) or ANTHROPIC_API_KEY / OPENAI_API_KEY in .env"
   );
+}
+
+/** Bare id → gateway model string (provider/model). */
+function toGatewayModel(model: string): string {
+  if (model.includes("/")) return model;
+  if (model.startsWith("claude")) return `anthropic/${model}`;
+  if (model.startsWith("gpt")) return `openai/${model}`;
+  if (model.startsWith("gemini")) return `google/${model}`;
+  return model;
 }
 
 export interface LLMMessage {
@@ -34,14 +70,27 @@ export interface LLMCallOptions {
   maxTokens?: number;
 }
 
-export async function llmCall(opts: LLMCallOptions): Promise<string> {
-  const model = opts.model ?? defaultModel();
+async function llmCallViaGateway(opts: LLMCallOptions, model: string): Promise<string> {
+  const gatewayModel = toGatewayModel(model);
+  logger.debug("llm call (gateway)", { model: gatewayModel, systemLen: opts.system.length });
 
-  logger.debug("llm call", { model, systemLen: opts.system.length });
+  const { text } = await generateText({
+    model: gatewayModel,
+    system: opts.system,
+    messages: opts.messages,
+    temperature: opts.temperature,
+    maxOutputTokens: opts.maxTokens ?? 4096,
+  });
+
+  if (!text) throw new Error("AI Gateway returned empty response");
+  return text;
+}
+
+async function llmCallDirect(opts: LLMCallOptions, model: string): Promise<string> {
+  logger.debug("llm call (direct)", { model, systemLen: opts.system.length });
 
   if (model.startsWith("claude")) {
     if (!anthropic) throw new Error("ANTHROPIC_API_KEY not set");
-
     const response = await anthropic.messages.create({
       model,
       max_tokens: opts.maxTokens ?? 4096,
@@ -49,7 +98,6 @@ export async function llmCall(opts: LLMCallOptions): Promise<string> {
       messages: opts.messages,
       temperature: opts.temperature,
     });
-
     const content = response.content[0];
     if (content.type !== "text") throw new Error(`Unexpected content type: ${content.type}`);
     return content.text;
@@ -57,7 +105,6 @@ export async function llmCall(opts: LLMCallOptions): Promise<string> {
 
   if (model.startsWith("gpt")) {
     if (!openaiClient) throw new Error("OPENAI_API_KEY not set");
-
     const response = await openaiClient.chat.completions.create({
       model,
       max_tokens: opts.maxTokens ?? 4096,
@@ -67,13 +114,18 @@ export async function llmCall(opts: LLMCallOptions): Promise<string> {
         ...opts.messages.map((m) => ({ role: m.role, content: m.content })),
       ],
     });
-
     const text = response.choices[0]?.message?.content;
     if (!text) throw new Error("OpenAI returned empty response");
     return text;
   }
 
   throw new Error(`Unsupported model: ${model}`);
+}
+
+export async function llmCall(opts: LLMCallOptions): Promise<string> {
+  const model = opts.model ?? defaultModel();
+  if (isGatewayEnabled()) return llmCallViaGateway(opts, model);
+  return llmCallDirect(opts, model);
 }
 
 export async function llmCallJSON<T>(opts: LLMCallOptions): Promise<T> {

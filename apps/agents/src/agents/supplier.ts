@@ -1,12 +1,15 @@
-import { llmCallJSON } from "../lib/llm";
+import { isGatewayEnabled, llmCallJSON } from "../lib/llm";
 import { logger } from "../lib/logger";
 import type { PaymentIntent, UserIntent, SupplierPitch } from "./types";
 
-const SUPPLIER_LLMS = [
-  { id: process.env.ANTHROPIC_API_KEY ? "claude-sonnet-4-5" : "gpt-4o", label: process.env.ANTHROPIC_API_KEY ? "Claude Sonnet" : "GPT-4o" },
-  { id: "gpt-4o", label: "GPT-4o" },
-  { id: "gpt-4o", label: "GPT-4o" }, // Gemini placeholder — swap when GOOGLE_GENERATIVE_AI_API_KEY added
-];
+function supplierLlms() {
+  const preferClaude = isGatewayEnabled() || Boolean(process.env.ANTHROPIC_API_KEY);
+  return [
+    { id: preferClaude ? "claude-sonnet-4-5" : "gpt-4o", label: preferClaude ? "Claude Sonnet" : "GPT-4o" },
+    { id: "gpt-4o", label: "GPT-4o" },
+    { id: "gpt-4o", label: "GPT-4o" }, // Gemini placeholder — swap when GOOGLE_GENERATIVE_AI_API_KEY added
+  ];
+}
 
 function buildSystemPrompt(option: PaymentIntent, intent: UserIntent, llmLabel: string): string {
   const budget = intent.budget ? `${intent.budget} SGD` : "unspecified";
@@ -41,7 +44,8 @@ export async function runSupplierAgent(
   intent: UserIntent,
   supplierIndex: number
 ): Promise<SupplierPitch> {
-  const llm = SUPPLIER_LLMS[supplierIndex % SUPPLIER_LLMS.length];
+  const llms = supplierLlms();
+  const llm = llms[supplierIndex % llms.length];
 
   logger.info(`supplier[${supplierIndex}]:start`, {
     vendor: option.vendor,

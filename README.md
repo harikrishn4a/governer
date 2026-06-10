@@ -37,7 +37,10 @@ Create `governer/.env` at the repo root (both apps load this file):
 # Discovery
 EXA_API_KEY=your_exa_api_key
 
-# LLM (OpenAI used if ANTHROPIC_API_KEY is empty)
+# LLM — Vercel AI Gateway (preferred; routes all agent LLM calls)
+AI_GATEWAY_API_KEY=vck_...
+
+# Direct provider keys (fallback when AI_GATEWAY_API_KEY is unset)
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=
 
