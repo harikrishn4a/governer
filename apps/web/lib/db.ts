@@ -1,15 +1,44 @@
 import { Pool } from "pg";
 import { config } from "dotenv";
 import path from "path";
+import fs from "fs";
 import dns from "dns/promises";
 
-config({ path: path.resolve(process.cwd(), "../../.env") });
+// Resolve DATABASE_URL robustly. Next.js auto-loads apps/web/.env.local, but the
+// server can be launched from different working directories (repo root, apps/web,
+// Vercel) — so if the var isn't already present, search the common env-file
+// locations relative to the cwd instead of assuming a single fixed path.
+function ensureEnvLoaded(): void {
+  if (process.env.DATABASE_URL) return; // already provided (Next .env.local, shell, Vercel)
+  const cwd = process.cwd();
+  const candidates = [
+    path.resolve(cwd, ".env.local"),        // launched from apps/web
+    path.resolve(cwd, ".env"),
+    path.resolve(cwd, "../../.env"),         // apps/web → repo root
+    path.resolve(cwd, "../../.env.local"),
+    path.resolve(cwd, "apps/web/.env.local"), // launched from repo root
+    path.resolve(cwd, ".env.local"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      config({ path: p });
+      if (process.env.DATABASE_URL) return;
+    }
+  }
+}
+
+ensureEnvLoaded();
 
 let poolPromise: Promise<Pool> | null = null;
 
 async function buildPool(): Promise<Pool> {
   const rawUrl = process.env.DATABASE_URL;
-  if (!rawUrl) throw new Error("DATABASE_URL is not set");
+  if (!rawUrl) {
+    throw new Error(
+      "DATABASE_URL is not set. Add it to apps/web/.env.local (or the repo-root .env), " +
+        "then restart the dev server."
+    );
+  }
 
   let connUrl = rawUrl;
   try {
