@@ -2,7 +2,7 @@
 
 > Express a purchase intent in natural language — AI agents discover real options, run a competitive bidding/negotiation round, enforce your spending rules, and execute a Stripe sandbox payment.
 
-AgentBid is a multi-agent **agentic procurement** system. You describe what you want
+Procure is a multi-agent **agentic procurement** system. You describe what you want
 ("a direct flight to Kuala Lumpur tomorrow under $300"); the agents do the rest:
 live discovery with [Exa](https://exa.ai), a supplier competition, an LLM judge, a
 governance layer that enforces your spending contract, and a real Stripe test-mode
@@ -16,7 +16,7 @@ payment on approval.
 
 ## Demo
 
-[![AgentBid demo walkthrough](https://img.youtube.com/vi/h1SFS_qbdU4/hqdefault.jpg)](https://youtu.be/h1SFS_qbdU4)
+[![Procure demo walkthrough](https://img.youtube.com/vi/h1SFS_qbdU4/hqdefault.jpg)](https://youtu.be/h1SFS_qbdU4)
 
 ▶️ **[Watch the full demo on YouTube →](https://youtu.be/h1SFS_qbdU4)**
 
@@ -218,7 +218,7 @@ procure/
 
 | Symptom | Fix |
 |---------|-----|
-| `role "agentbid" does not exist` | App is hitting Postgres.app on **5432** instead of Docker on **5433**. Keep `DATABASE_URL` on **5433** and restart both dev servers. |
+| `role "procure" does not exist` | App is hitting Postgres.app on **5432** instead of Docker on **5433**. Keep `DATABASE_URL` on **5433** and restart both dev servers. |
 | `Cannot connect to Docker daemon` | Start Docker Desktop, then `docker compose up -d postgres`. |
 | `contracts 500` / DB errors | Run the migrations (step 4); confirm `curl http://localhost:4000/health` is OK. |
 | `.env` changes ignored | Restart `npm run dev` in **both** apps. |
