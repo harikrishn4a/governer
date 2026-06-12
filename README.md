@@ -1,4 +1,4 @@
-# AgentBid
+# Procure
 
 > Express a purchase intent in natural language — AI agents discover real options, run a competitive bidding/negotiation round, enforce your spending rules, and execute a Stripe sandbox payment.
 
