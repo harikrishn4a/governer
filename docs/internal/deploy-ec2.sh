@@ -14,15 +14,15 @@ sed -e 's|localhost:5433|localhost:5432|' \
     -e 's|AGENTS_BASE_URL=.*|AGENTS_BASE_URL=http://localhost:4000|' \
     -e 's|NEXT_PUBLIC_APP_URL=.*|NEXT_PUBLIC_APP_URL=http://44.248.228.50:3000|' \
     "$REPO_ROOT/.env" > /tmp/agentbid-ec2.env
-scp -i "$SSH_KEY" -o StrictHostKeyChecking=no /tmp/agentbid-ec2.env "$EC2_HOST:~/governer/.env"
+scp -i "$SSH_KEY" -o StrictHostKeyChecking=no /tmp/agentbid-ec2.env "$EC2_HOST:~/procure/.env"
 
 echo "==> Pulling latest code"
-$SSH "$EC2_HOST" 'cd ~/governer && git pull --ff-only origin main'
+$SSH "$EC2_HOST" 'cd ~/procure && git pull --ff-only origin main'
 
 echo "==> Postgres + migrations"
 $SSH "$EC2_HOST" 'bash -s' << 'REMOTE'
 set -euo pipefail
-cd ~/governer
+cd ~/procure
 if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^agentbid-postgres$"; then
   sudo docker run -d --name agentbid-postgres --restart unless-stopped \
     -e POSTGRES_DB=agentbid -e POSTGRES_USER=agentbid -e POSTGRES_PASSWORD=agentbid \
@@ -40,10 +40,10 @@ done
 REMOTE
 
 echo "==> Building agents"
-$SSH "$EC2_HOST" 'cd ~/governer/apps/agents && npm install && npm run build && pm2 restart agentbid-agents || pm2 start npm --name agentbid-agents --cwd /home/ec2-user/governer/apps/agents -- start'
+$SSH "$EC2_HOST" 'cd ~/procure/apps/agents && npm install && npm run build && pm2 restart agentbid-agents || pm2 start npm --name agentbid-agents --cwd /home/ec2-user/procure/apps/agents -- start'
 
 echo "==> Building web"
-$SSH "$EC2_HOST" 'cd ~/governer/apps/web && export NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=1536" && npm install && npm run build && pm2 restart agentbid-web || PORT=3000 pm2 start npm --name agentbid-web --cwd /home/ec2-user/governer/apps/web -- start'
+$SSH "$EC2_HOST" 'cd ~/procure/apps/web && export NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=1536" && npm install && npm run build && pm2 restart agentbid-web || PORT=3000 pm2 start npm --name agentbid-web --cwd /home/ec2-user/procure/apps/web -- start'
 $SSH "$EC2_HOST" 'pm2 save'
 
 echo "==> Health checks (on instance)"
