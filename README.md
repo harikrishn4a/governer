@@ -16,13 +16,16 @@ payment on approval.
 
 ## Demo
 
-<!-- Replace VIDEO_URL with your uploaded demo link (YouTube/Loom), and optionally
-     drop a thumbnail image at docs/demo-thumbnail.png for a clickable preview. -->
-
-📺 **[Watch the demo walkthrough →](VIDEO_URL)**
+> 📺 **Demo video** — _inline player coming once the repo is on GitHub (see steps below)._
 
 <!--
-[![AgentBid demo](docs/demo-thumbnail.png)](VIDEO_URL)
+  EMBED AN INLINE VIDEO PLAYER (no repo bloat — GitHub hosts the file on its CDN):
+    1. Push this repo to GitHub.
+    2. Open the repo on github.com → Issues → New issue (you do NOT need to submit it).
+    3. Drag your demo file (final/p2.mp4) into the comment box; wait for the upload bar to finish.
+    4. GitHub inserts a URL like:  https://github.com/user-attachments/assets/<id>
+    5. Replace the blockquote line above with that URL on ITS OWN LINE — GitHub then
+       renders an inline <video> player automatically. (Or paste the URL back to me.)
 -->
 
 ---
